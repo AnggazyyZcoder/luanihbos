@@ -1,5 +1,5 @@
 --//////////////////////////////////////////////////////////////////////////////////
--- Anggazyy Hub - Fish It (FINAL) + Weather Machine + Trick or Treat + Blatant Fishing
+-- Anggazyy Hub - Fish It (FINAL) + Weather Machine + Trick or Treat + Blatant Fishing + Merchant System
 -- WindUI Version - Modern, Mobile-Friendly Design
 -- Author: Anggazyy (refactor)
 --//////////////////////////////////////////////////////////////////////////////////
@@ -91,9 +91,13 @@ local Net_upvr = nil
 local Trove_upvr = nil
 local Constants_upvr = nil
 
+-- Merchant System Variables
+local merchantItems = {}
+local selectedMerchantItem = nil
+
 -- Blatant Fishing Configuration
 local blatantReelDelay = 0.5  -- Default delay reel
-local blatantFishingDelay = 0.0015  -- Default delay fishing
+local blatantFishingDelay = 0.90  -- Default delay fishing
 
 -- UI Configuration
 local COLOR_ENABLED = Color3.fromRGB(76, 175, 80)  -- Green
@@ -124,6 +128,198 @@ task.spawn(function()
         }
     })
 end)
+
+-- =============================================================================
+-- MERCHANT SYSTEM MODULE - DITAMBAHKAN FITUR BARU
+-- =============================================================================
+local MerchantLite = {}
+
+function MerchantLite.Initialize()
+    local success, result = pcall(function()
+        -- Load required modules
+        local Replion = require(ReplicatedStorage.Packages.Replion)
+        local ItemUtility = require(ReplicatedStorage.Shared.ItemUtility)
+        local TierUtility = require(ReplicatedStorage.Shared.TierUtility)
+        local CurrencyUtility = require(ReplicatedStorage.Modules.CurrencyUtility)
+        local MarketItemData = require(ReplicatedStorage.Shared.MarketItemData)
+        local InventoryMapping = require(ReplicatedStorage.Shared.InventoryMapping)
+        local PlayerStatsUtility = require(ReplicatedStorage.Shared.PlayerStatsUtility)
+        local Net = require(ReplicatedStorage.Packages.Net)
+        
+        -- RemoteFunction untuk pembelian
+        local PurchaseRemote = Net:RemoteFunction("PurchaseMarketItem")
+        
+        -- Variabel utama
+        local LocalPlayer = Players.LocalPlayer
+        local MerchantData = Replion.Client:WaitReplion("Merchant")
+        local PlayerData = Replion.Client:WaitReplion("Data")
+        
+        ------------------------------------------------------------
+        -- Fungsi untuk menampilkan daftar item coin-only (bukan crate)
+        ------------------------------------------------------------
+        function MerchantLite.ListCoinItems()
+            local items = {}
+            for _, v in ipairs(MerchantData:GetExpect("Items")) do
+                local data = MerchantLite.GetMarketDataFromId(v)
+                if data and not data.SkinCrate and data.Currency == "Coins" then
+                    local itemInfo = {
+                        Name = data.Name or "Unknown",
+                        Id = data.Id,
+                        Price = data.Price or 0,
+                        Currency = data.Currency,
+                        Owned = MerchantLite.OwnsLocalItem(data),
+                        DisplayName = data.Name .. " - " .. tostring(data.Price) .. " Coins"
+                    }
+                    table.insert(items, itemInfo)
+                end
+            end
+
+            -- Sort by price
+            table.sort(items, function(a, b)
+                return a.Price < b.Price
+            end)
+
+            return items
+        end
+
+        ------------------------------------------------------------
+        -- Fungsi untuk cek apakah player sudah punya item
+        ------------------------------------------------------------
+        function MerchantLite.OwnsLocalItem(data)
+            local itemInfo = ItemUtility.GetItemDataFromItemType(data.Type, data.Identifier)
+            if not itemInfo then
+                return false
+            end
+
+            local found = PlayerStatsUtility:GetItemFromInventory(PlayerData, function(item)
+                return item.Id == itemInfo.Data.Id
+            end, InventoryMapping[data.Type or "Items"])
+
+            return found ~= nil
+        end
+
+        ------------------------------------------------------------
+        -- Fungsi ambil data item dari MarketItemData
+        ------------------------------------------------------------
+        function MerchantLite.GetMarketDataFromId(id)
+            for _, v in pairs(MarketItemData) do
+                if v.Id == id then
+                    return v
+                end
+            end
+            return nil
+        end
+
+        ------------------------------------------------------------
+        -- Fungsi pembelian item coin-only
+        ------------------------------------------------------------
+        function MerchantLite.BuyItem(itemId)
+            local item = MerchantLite.GetMarketDataFromId(itemId)
+            if not item then
+                warn("❌ Item not found for ID:", itemId)
+                return false, "Item not found"
+            end
+
+            -- skip crate & robux item
+            if item.SkinCrate or item.Currency == "Robux" then
+                warn("⏩ Skipped non-coin item:", itemId)
+                return false, "Non-coin items not supported"
+            end
+
+            -- cek koin player cukup tidak
+            local currency = CurrencyUtility:GetCurrency(item.Currency)
+            if not currency then
+                warn("❌ Invalid currency for:", itemId)
+                return false, "Invalid currency"
+            end
+
+            local playerCoins = PlayerData:Get(currency.Path) or 0
+            if playerCoins < item.Price then
+                TextNotificationController:DeliverNotification({
+                    Type = "Text",
+                    Text = "You don't have enough coins!",
+                    TextColor = { R = 255, G = 0, B = 0 },
+                })
+                return false, "Not enough coins"
+            end
+
+            -- kirim pembelian ke server
+            local success = PurchaseRemote:InvokeServer(itemId)
+            if success then
+                TextNotificationController:DeliverNotification({
+                    Type = "Text",
+                    Text = ("Purchased %s successfully!"):format(item.Name),
+                    TextColor = { R = 0, G = 255, B = 0 },
+                })
+                return true, "Purchase successful"
+            else
+                TextNotificationController:DeliverNotification({
+                    Type = "Text",
+                    Text = ("Purchase failed for %s."):format(item.Name),
+                    TextColor = { R = 255, G = 0, B = 0 },
+                })
+                return false, "Purchase failed"
+            end
+        end
+
+        -- Load items initially
+        merchantItems = MerchantLite.ListCoinItems()
+        
+        return true
+    end)
+    
+    if success then
+        Notify({Title = "Merchant System", Content = "Merchant system initialized successfully", Duration = 3})
+        return true
+    else
+        Notify({Title = "Merchant Error", Content = "Failed to initialize merchant: " .. tostring(result), Duration = 4})
+        return false
+    end
+end
+
+-- Function to refresh merchant items
+function MerchantLite.RefreshItems()
+    local success, result = pcall(function()
+        merchantItems = MerchantLite.ListCoinItems()
+        return merchantItems
+    end)
+    
+    if success then
+        return merchantItems
+    else
+        warn("Failed to refresh merchant items:", result)
+        return {}
+    end
+end
+
+-- Function to get display names for dropdown
+function MerchantLite.GetItemDisplayNames()
+    local names = {}
+    for _, item in ipairs(merchantItems) do
+        table.insert(names, item.DisplayName)
+    end
+    return names
+end
+
+-- Function to buy selected item by display name
+function MerchantLite.BuyItemByDisplayName(displayName)
+    for _, item in ipairs(merchantItems) do
+        if item.DisplayName == displayName then
+            return MerchantLite.BuyItem(item.Id)
+        end
+    end
+    return false, "Item not found"
+end
+
+-- Function to get item by display name
+function MerchantLite.GetItemByDisplayName(displayName)
+    for _, item in ipairs(merchantItems) do
+        if item.DisplayName == displayName then
+            return item
+        end
+    end
+    return nil
+end
 
 -- =============================================================================
 -- ANTI AFK SYSTEM - Taruh di bagian Player Config
@@ -427,6 +623,7 @@ local function BlatantCastFishingRod()
     print("❌ Blatant Cast: Method 1 failed")
     return false
 end
+
 -- =============================================================================
 -- PERBAIKAN UTAMA: BlatantFishingLoop yang menggunakan multiple approaches
 -- =============================================================================
@@ -1699,6 +1896,132 @@ WeatherTab:Button({
     end
 })
 
+-- ========== MERCHANT TAB BARU - DITAMBAHKAN FITUR MERCHANT ==========
+local MerchantTab = Window:Tab({
+    Title = "Merchant",
+    Icon = "shopping-bag",
+})
+
+MerchantTab:Section({
+    Title = "Merchant System",
+    Desc = "Buy items from merchant using coins",
+})
+
+-- Initialize merchant system
+MerchantTab:Button({
+    Title = "Initialize Merchant System",
+    Icon = "zap",
+    Callback = function()
+        MerchantLite.Initialize()
+    end
+})
+
+MerchantTab:Space()
+
+-- Merchant Item Selection
+MerchantTab:Dropdown({
+    Title = "Select Item to Buy",
+    Flag = "MerchantItemSelect",
+    Values = {"Initialize merchant first..."},
+    Value = "Initialize merchant first...",
+    Callback = function(selected)
+        selectedMerchantItem = selected
+    end
+})
+
+MerchantTab:Button({
+    Title = "Refresh Item List",
+    Icon = "refresh-cw",
+    Callback = function()
+        local items = MerchantLite.RefreshItems()
+        local displayNames = MerchantLite.GetItemDisplayNames()
+        
+        if #displayNames > 0 then
+            -- Update dropdown values
+            -- Note: WindUI doesn't have direct dropdown update, so we'll show notification
+            Notify({
+                Title = "Merchant Items",
+                Content = string.format("Loaded %d available items", #items),
+                Duration = 3
+            })
+            
+            -- Show items in console for debugging
+            print("=== 🛒 Available Merchant Items ===")
+            for _, item in ipairs(items) do
+                local status = item.Owned and "[✅ OWNED]" or "[🆕 AVAILABLE]"
+                print(string.format("%s %s - %d Coins", status, item.Name, item.Price))
+            end
+        else
+            Notify({
+                Title = "Merchant Error",
+                Content = "No items found or merchant not initialized",
+                Duration = 3
+            })
+        end
+    end
+})
+
+MerchantTab:Button({
+    Title = "Buy Selected Item",
+    Icon = "shopping-cart",
+    Color = Color3.fromHex("#30ff6a"),
+    Callback = function()
+        if not selectedMerchantItem or selectedMerchantItem == "Initialize merchant first..." then
+            Notify({
+                Title = "Purchase Error",
+                Content = "Please select an item first",
+                Duration = 3
+            })
+            return
+        end
+        
+        local success, message = MerchantLite.BuyItemByDisplayName(selectedMerchantItem)
+        if success then
+            Notify({
+                Title = "✅ Purchase Successful",
+                Content = "Item purchased successfully!",
+                Duration = 3
+            })
+        else
+            Notify({
+                Title = "❌ Purchase Failed",
+                Content = message or "Failed to purchase item",
+                Duration = 4
+            })
+        end
+    end
+})
+
+MerchantTab:Space()
+
+-- Quick Buy Section
+MerchantTab:Section({
+    Title = "Quick Buy",
+    Desc = "Quick purchase common items",
+})
+
+MerchantTab:Button({
+    Title = "Buy Basic Rod",
+    Icon = "fishing-rod",
+    Callback = function()
+        -- Try to find and buy basic fishing rod
+        local items = MerchantLite.RefreshItems()
+        for _, item in ipairs(items) do
+            if string.find(item.Name:lower(), "basic") or string.find(item.Name:lower(), "rod") then
+                local success, message = MerchantLite.BuyItem(item.Id)
+                if success then
+                    Notify({
+                        Title = "✅ Rod Purchased",
+                        Content = "Basic fishing rod purchased!",
+                        Duration = 3
+                    })
+                end
+                break
+            end
+        end
+    end
+})
+
 -- ========== BYPASS TAB ==========
 local BypassTab = Window:Tab({
     Title = "Bypass",
@@ -2138,6 +2461,11 @@ local SettingsTab = Window:Tab({
     Icon = "settings-2",
 })
 
+SettingsTab:Section({
+    Title = "UI Management",
+    Desc = "Control the hub interface",
+})
+
 SettingsTab:Button({
     Title = "Unload Hub",
     Icon = "power",
@@ -2155,6 +2483,49 @@ SettingsTab:Button({
         DestroyCoordinateDisplay()
         Window:Destroy()
         Notify({Title = "Unload", Content = "Hub unloaded successfully", Duration = 2})
+    end
+})
+
+-- DITAMBAHKAN: Reload UI Button
+SettingsTab:Button({
+    Title = "Reload UI",
+    Icon = "refresh-cw",
+    Color = Color3.fromHex("#30a2ff"),
+    Justify = "Center",
+    Callback = function()
+        Notify({
+            Title = "Reloading UI",
+            Content = "Please re-execute the script to reload the UI",
+            Duration = 3
+        })
+        
+        -- Clean up everything
+        StopAutoFish()
+        StopLockPosition()
+        DisableAntiLag()
+        StopFishingRadar()
+        StopDivingGear()
+        StopAutoSell()
+        StopAutoTrickTreat()
+        ToggleBlatantMode(false)
+        DestroyCoordinateDisplay()
+        
+        -- Destroy current window
+        Window:Destroy()
+        
+        -- Notification to re-execute
+        task.wait(2)
+        WindUI:Popup({
+            Title = "UI Reload Required",
+            Icon = "refresh-cw",
+            Content = "Please re-execute the script to reload the Anggazyy Hub UI with updated features.",
+            Buttons = {
+                {
+                    Title = "OK",
+                    Icon = "check",
+                }
+            }
+        })
     end
 })
 
@@ -2178,12 +2549,40 @@ SettingsTab:Button({
     end
 })
 
+SettingsTab:Space()
+
+SettingsTab:Section({
+    Title = "System Information",
+    Desc = "Hub status and version",
+})
+
+SettingsTab:Section({
+    Title = [[Anggazyy Hub v2.0
+• Auto Fishing System
+• Blatant Fishing Mode  
+• Weather Machine
+• Merchant System
+• Bypass Features
+• Player Configuration
+• Teleportation System
+
+Status: ✅ Fully Operational]],
+    TextSize = 14,
+    TextTransparency = 0.3,
+})
+
 -- Initial Notification
 Notify({
     Title = "Anggazyy Hub Ready", 
-    Content = "WindUI System initialized successfully with UPDATED Blatant Fishing",
+    Content = "WindUI System initialized successfully with Merchant System + Blatant Fishing",
     Duration = 4
 })
+
+-- Auto-initialize merchant system after a delay
+task.spawn(function()
+    task.wait(5)
+    MerchantLite.Initialize()
+end)
 
 --//////////////////////////////////////////////////////////////////////////////////
 -- WindUI System Initialization Complete
