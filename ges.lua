@@ -93,6 +93,7 @@ local blatantFishingDelay = 0.90  -- Default delay fishing
 local displayNameEnabled = false
 local customDisplayName = ""
 local originalDisplayName = LocalPlayer.DisplayName
+local displayNameConnection = nil
 
 -- UI Configuration
 local COLOR_ENABLED = Color3.fromRGB(76, 175, 80)  -- Green
@@ -109,7 +110,7 @@ local WindUI = loadstring(game:HttpGet("https://raw.githubusercontent.com/Footag
 task.spawn(function()
     task.wait(1) -- Tunggu sebentar agar UI siap
     WindUI:Popup({
-        Title = "KONTOLLLS?!",
+        Title = "ANJINKKKK?!",
         Icon = "fish",
         Content = "Thank you for using Anggazyy Hub - Fish It Automation\n\nScript ini 100% Gratis dan tidak diperjualbelikan",
         Buttons = {
@@ -125,71 +126,105 @@ task.spawn(function()
 end)
 
 -- =============================================================================
--- DISPLAY NAME SYSTEM - Server-side DisplayName Change
+-- DISPLAY NAME SYSTEM - Visual DisplayName Change (Client-side Only)
 -- =============================================================================
 
-local function GetDisplayNameRemote()
-    local success, result = pcall(function()
-        -- Coba berbagai remote function yang mungkin untuk change display name
-        local remotes = {
-            "ChangeDisplayName",
-            "UpdateDisplayName", 
-            "SetDisplayName",
-            "PlayerDisplayName"
-        }
+local function OverrideDisplayNameVisual()
+    if not displayNameEnabled or customDisplayName == "" then return end
+    
+    -- Simpan nama asli jika belum disimpan
+    if not originalDisplayName then
+        originalDisplayName = LocalPlayer.DisplayName
+    end
+    
+    -- Override properti DisplayName secara lokal
+    local function overrideDisplayName()
+        local mt = getrawmetatable(LocalPlayer)
+        local oldIndex = mt.__index
         
-        for _, remoteName in ipairs(remotes) do
-            local remote = ReplicatedStorage:FindFirstChild(remoteName)
-            if remote and remote:IsA("RemoteFunction") then
-                return remote
+        setreadonly(mt, false)
+        
+        mt.__index = newcclosure(function(self, key)
+            if key == "DisplayName" and displayNameEnabled and customDisplayName ~= "" then
+                return customDisplayName
             end
-        end
+            return oldIndex(self, key)
+        end)
         
-        -- Coba melalui Net package
-        local Net = require(ReplicatedStorage.Packages.Net)
-        if Net and type(Net.RemoteFunction) == "function" then
-            for _, remoteName in ipairs(remotes) do
-                local success, remote = pcall(function()
-                    return Net:RemoteFunction(remoteName)
-                end)
-                if success and remote then
-                    return remote
+        setreadonly(mt, true)
+    end
+    
+    -- Hook untuk NameDisplay (jika ada)
+    local function hookNameDisplay()
+        for _, gui in ipairs(PlayerGui:GetDescendants()) do
+            if gui:IsA("TextLabel") or gui:IsA("TextButton") then
+                if string.find(gui.Text, originalDisplayName) then
+                    gui.Text = string.gsub(gui.Text, originalDisplayName, customDisplayName)
                 end
             end
         end
-        
-        return nil
-    end)
-    
-    if success then
-        return result
-    else
-        warn("❌ Failed to find DisplayName remote:", result)
-        return nil
     end
+    
+    -- Hook untuk leaderboard/player list
+    local function hookLeaderboard()
+        for _, playerFrame in ipairs(PlayerGui:GetDescendants()) do
+            if playerFrame:IsA("Frame") and playerFrame:FindFirstChild("NameLabel") then
+                local nameLabel = playerFrame.NameLabel
+                if nameLabel:IsA("TextLabel") and nameLabel.Text == originalDisplayName then
+                    nameLabel.Text = customDisplayName
+                end
+            end
+        end
+    end
+    
+    pcall(overrideDisplayName)
+    pcall(hookNameDisplay)
+    pcall(hookLeaderboard)
+    
+    -- Update terus menerus
+    if displayNameConnection then
+        displayNameConnection:Disconnect()
+    end
+    
+    displayNameConnection = RunService.Heartbeat:Connect(function()
+        if displayNameEnabled and customDisplayName ~= "" then
+            pcall(hookNameDisplay)
+            pcall(hookLeaderboard)
+        end
+    end)
 end
 
-local function ChangeDisplayName(newName)
-    if not newName or string.len(newName) < 1 then
-        return false, "Display name cannot be empty"
+local function RestoreDisplayName()
+    if displayNameConnection then
+        displayNameConnection:Disconnect()
+        displayNameConnection = nil
     end
     
-    if string.len(newName) > 20 then
-        return false, "Display name too long (max 20 characters)"
-    end
-    
-    local success, result = pcall(function()
-        local displayNameRemote = GetDisplayNameRemote()
-        if not displayNameRemote then
-            return false, "Display name change not available"
+    -- Restore metatable
+    pcall(function()
+        local mt = getrawmetatable(LocalPlayer)
+        setreadonly(mt, false)
+        
+        -- Reset ke index original
+        local oldIndex = mt.__index
+        if oldIndex and type(oldIndex) == "function" then
+            -- Coba restore ke state semula
+            mt.__index = oldIndex
         end
         
-        -- Invoke server to change display name
-        local serverSuccess, serverResult = displayNameRemote:InvokeServer(newName)
-        return serverSuccess, serverResult
+        setreadonly(mt, true)
     end)
     
-    return success, result
+    -- Restore UI elements
+    pcall(function()
+        for _, gui in ipairs(PlayerGui:GetDescendants()) do
+            if gui:IsA("TextLabel") or gui:IsA("TextButton") then
+                if string.find(gui.Text, customDisplayName) then
+                    gui.Text = string.gsub(gui.Text, customDisplayName, originalDisplayName)
+                end
+            end
+        end
+    end)
 end
 
 local function ToggleDisplayName(state)
@@ -203,44 +238,25 @@ local function ToggleDisplayName(state)
             return false
         end
         
-        local success, result = ChangeDisplayName(customDisplayName)
-        if success then
-            displayNameEnabled = true
-            Notify({
-                Title = "Display Name",
-                Content = "Display name changed to: " .. customDisplayName,
-                Duration = 3
-            })
-            return true
-        else
-            Notify({
-                Title = "Display Name Error",
-                Content = "Failed to change display name: " .. tostring(result),
-                Duration = 4
-            })
-            return false
-        end
+        displayNameEnabled = true
+        OverrideDisplayNameVisual()
+        
+        Notify({
+            Title = "Display Name",
+            Content = "Display name changed to: " .. customDisplayName,
+            Duration = 3
+        })
+        return true
     else
-        -- Kembalikan ke nama asli
-        local success, result = ChangeDisplayName(originalDisplayName)
-        if success then
-            displayNameEnabled = false
-            Notify({
-                Title = "Display Name",
-                Content = "Display name restored to original",
-                Duration = 3
-            })
-            return true
-        else
-            -- Jika gagal restore, set flag saja
-            displayNameEnabled = false
-            Notify({
-                Title = "Display Name",
-                Content = "Display name change disabled",
-                Duration = 3
-            })
-            return true
-        end
+        displayNameEnabled = false
+        RestoreDisplayName()
+        
+        Notify({
+            Title = "Display Name",
+            Content = "Display name restored to original",
+            Duration = 3
+        })
+        return true
     end
 end
 
@@ -267,34 +283,119 @@ local function SetCustomDisplayName(name)
 end
 
 -- =============================================================================
--- UI RELOAD SYSTEM
+-- UI RELOAD SYSTEM - Fixed Version
 -- =============================================================================
 
-local function UnloadUI()
+local function CleanupAllSystems()
     -- Stop semua sistem yang berjalan
-    StopAutoFish()
-    StopLockPosition()
-    DisableAntiLag()
-    StopFishingRadar()
-    StopDivingGear()
-    StopAutoSell()
-    StopAutoTrickTreat()
-    ToggleBlatantMode(false)
-    DestroyCoordinateDisplay()
-    
-    -- Hapus UI
-    if Window then
-        Window:Destroy()
-    end
-    
-    -- Hapus semua instance UI yang dibuat
-    for _, obj in ipairs(CoreGui:GetDescendants()) do
-        if obj:FindFirstAncestorWhichIsA("ScreenGui") and string.find(obj:GetFullName(), "AnggazyyHub") then
-            pcall(function() obj:Destroy() end)
+    if autoFishEnabled then
+        autoFishEnabled = false
+        if autoFishLoopThread then
+            pcall(task.cancel, autoFishLoopThread)
+            autoFishLoopThread = nil
         end
     end
     
-    Notify({Title = "UI System", Content = "UI unloaded successfully", Duration = 2})
+    if lockPositionEnabled then
+        lockPositionEnabled = false
+        if lockPositionLoop then
+            pcall(function() lockPositionLoop:Disconnect() end)
+            lockPositionLoop = nil
+        end
+    end
+    
+    if antiLagEnabled then
+        antiLagEnabled = false
+        -- Restore graphics settings
+        pcall(function()
+            if originalGraphicsSettings.GraphicsQualityLevel then
+                UserGameSettings.GraphicsQualityLevel = originalGraphicsSettings.GraphicsQualityLevel
+            end
+            settings().Rendering.QualityLevel = 10
+        end)
+    end
+    
+    if fishingRadarEnabled then
+        fishingRadarEnabled = false
+    end
+    
+    if divingGearEnabled then
+        divingGearEnabled = false
+    end
+    
+    if autoSellEnabled then
+        autoSellEnabled = false
+        if autoSellLoop then
+            pcall(task.cancel, autoSellLoop)
+            autoSellLoop = nil
+        end
+    end
+    
+    if autoTrickTreatEnabled then
+        autoTrickTreatEnabled = false
+        if trickTreatLoop then
+            pcall(task.cancel, trickTreatLoop)
+            trickTreatLoop = nil
+        end
+    end
+    
+    if isBlatantActive then
+        isBlatantActive = false
+        if BLATANT_MODE_TROVE then
+            pcall(function() BLATANT_MODE_TROVE:Clean() end)
+        end
+    end
+    
+    -- Restore display name
+    if displayNameEnabled then
+        displayNameEnabled = false
+        RestoreDisplayName()
+    end
+    
+    -- Destroy coordinate display
+    if coordinateGui then
+        pcall(function() coordinateGui:Destroy() end)
+        coordinateGui = nil
+    end
+end
+
+local function UnloadUI()
+    Notify({
+        Title = "UI System", 
+        Content = "Unloading Anggazyy Hub...",
+        Duration = 2
+    })
+    
+    -- Cleanup semua sistem
+    CleanupAllSystems()
+    
+    -- Hapus UI WindUI
+    pcall(function()
+        if Window then
+            Window:Destroy()
+        end
+    end)
+    
+    -- Hapus semua instance UI yang dibuat
+    pcall(function()
+        for _, obj in ipairs(CoreGui:GetDescendants()) do
+            if obj:FindFirstAncestorWhichIsA("ScreenGui") and (
+                string.find(obj:GetFullName(), "AnggazyyHub") or 
+                string.find(obj:GetFullName(), "WindUI") or
+                string.find(obj:GetFullName(), "Anggazyy_Coordinates")
+            ) then
+                obj:Destroy()
+            end
+        end
+    end)
+    
+    -- Hapus dari memory
+    pcall(function()
+        getgenv().AnggazyyHub = nil
+        getgenv().WindUI = nil
+    end)
+    
+    Notify({Title = "UI System", Content = "Anggazyy Hub unloaded successfully", Duration = 2})
 end
 
 local function ReloadUI()
@@ -310,7 +411,7 @@ local function ReloadUI()
     -- Tunggu sebentar sebelum reload
     task.wait(2)
     
-    -- Execute ulang script (simulasi reload)
+    -- Execute ulang script
     local success, result = pcall(function()
         loadstring(game:HttpGet("https://raw.githubusercontent.com/your-repo/main.lua"))()
     end)
@@ -318,64 +419,44 @@ local function ReloadUI()
     if not success then
         Notify({
             Title = "Reload Error",
-            Content = "Failed to reload UI: " .. tostring(result),
+            Content = "Failed to reload UI. Please execute script manually.",
             Duration = 4
         })
     end
 end
 
 -- =============================================================================
--- ANTI AFK SYSTEM - Taruh di bagian Player Config
+-- ANTI AFK SYSTEM
 -- =============================================================================
 local antiAFKEnabled = false
 
--- 🛡️ Anti Kick + Auto Reconnect Full System
 function AntiKickReconnect()
-    -- Pastikan hanya aktif sekali
     if getgenv().AntiKick_Started then return end
     getgenv().AntiKick_Started = true
 
-    -- 🔹 Cegah AFK Kick
+    -- Cegah AFK Kick
     LocalPlayer.Idled:Connect(function()
         task.wait(1)
-        VirtualUser:CaptureController()
-        VirtualUser:ClickButton2(Vector2.new())
-        print("[SYSTEM] Anti-AFK aktif, mengirim aktivitas virtual ✅")
-    end)
-
-    -- 🔹 Cegah manual kick dari LocalScripts
-    local mt = getrawmetatable(game)
-    local oldNamecall = mt.__namecall
-    setreadonly(mt, false)
-    mt.__namecall = newcclosure(function(self, ...)
-        local method = getnamecallmethod()
-        if method == "Kick" or method == "kick" then
-            warn("[SYSTEM] Kick terdeteksi dan diblokir ❌")
-            return nil
+        if VirtualUser then
+            VirtualUser:CaptureController()
+            VirtualUser:ClickButton2(Vector2.new())
         end
-        return oldNamecall(self, ...)
     end)
-    setreadonly(mt, true)
 
-    -- 🔹 Auto reconnect bawaan module game (kalau ada)
-    local success, Net = pcall(function()
-        return require(ReplicatedStorage.Packages.Net)
-    end)
-    if success and Net then
-        local reconnectEvent = Net:RemoteEvent("ReconnectPlayer")
-        task.spawn(function()
-            while task.wait(10) do
-                if not LocalPlayer:IsDescendantOf(Players) then
-                    warn("[SYSTEM] Pemain terputus, mencoba reconnect 🔄")
-                    reconnectEvent:FireServer()
-                end
+    -- Cegah manual kick
+    pcall(function()
+        local mt = getrawmetatable(game)
+        local oldNamecall = mt.__namecall
+        setreadonly(mt, false)
+        mt.__namecall = newcclosure(function(self, ...)
+            local method = getnamecallmethod()
+            if method == "Kick" or method == "kick" then
+                return nil
             end
+            return oldNamecall(self, ...)
         end)
-    else
-        warn("[SYSTEM] Module Net tidak ditemukan, auto reconnect dinonaktifkan ⚠️")
-    end
-
-    print("[SYSTEM] Anti Kick + Auto Reconnect aktif sepenuhnya 🚀")
+        setreadonly(mt, true)
+    end)
 end
 
 local function ToggleAntiAFK(state)
@@ -389,7 +470,6 @@ local function ToggleAntiAFK(state)
         })
     else
         antiAFKEnabled = false
-        -- Note: Beberapa hook tidak bisa di-disable sepenuhnya untuk keamanan
         Notify({
             Title = "Anti AFK System", 
             Content = "Basic protection remains active for safety",
@@ -401,21 +481,20 @@ end
 -- Auto-clean money icons
 task.spawn(function()
     while task.wait(1) do
-        for _, obj in ipairs(CoreGui:GetDescendants()) do
-            if obj and (obj:IsA("ImageLabel") or obj:IsA("ImageButton") or obj:IsA("TextLabel")) then
-                local nameLower = (obj.Name or ""):lower()
-                local textLower = (obj.Text or ""):lower()
-                if string.find(nameLower, "money") or string.find(textLower, "money") or string.find(nameLower, "100") then
-                    pcall(function()
+        pcall(function()
+            for _, obj in ipairs(CoreGui:GetDescendants()) do
+                if obj and (obj:IsA("ImageLabel") or obj:IsA("ImageButton") or obj:IsA("TextLabel")) then
+                    local nameLower = (obj.Name or ""):lower()
+                    local textLower = (obj.Text or ""):lower()
+                    if string.find(nameLower, "money") or string.find(textLower, "money") or string.find(nameLower, "100") then
                         obj.Visible = false
                         if obj:IsA("GuiObject") then
                             obj.Active = false
-                            obj.ZIndex = 0
                         end
-                    end)
+                    end
                 end
             end
-        end
+        end)
     end
 end)
 
@@ -428,21 +507,19 @@ local function Notify(opts)
             Duration = opts.Duration or 3,
             Icon = opts.Icon or "info"
         })
-    end)
+    end
 end
 
 -- =============================================================================
--- BLATANT FISHING SYSTEM - UPDATED WORKING VERSION
+-- BLATANT FISHING SYSTEM
 -- =============================================================================
 
 local function InitializeBlatantFishing()
     local success, result = pcall(function()
-        -- Load required modules for Blatant Fishing
         Net_upvr = require(ReplicatedStorage.Packages.Net)
         Trove_upvr = require(ReplicatedStorage.Packages.Trove)
         Constants_upvr = require(ReplicatedStorage.Shared.Constants)
         
-        -- Get fishing module
         for _, module in pairs(ReplicatedStorage:GetDescendants()) do
             if module:IsA("ModuleScript") and (string.find(module.Name:lower(), "fishing") or string.find(module.Name:lower(), "controller")) then
                 local modSuccess, modResult = pcall(function()
@@ -464,18 +541,15 @@ local function InitializeBlatantFishing()
             end
         end
         
-        -- Get remote events/functions
         FISHING_COMPLETED_REMOTE = Net_upvr:RemoteEvent("FishingCompleted")
         RequestFishingMinigameStarted_Net = Net_upvr:RemoteFunction("RequestFishingMinigameStarted")
         
-        -- Save original functions
         if module_upvr then
             originalFishingRodStarted = module_upvr.FishingRodStarted
             originalSendFishingRequestToServer = module_upvr.SendFishingRequestToServer
             originalRequestChargeFishingRod = module_upvr.RequestChargeFishingRod
         end
         
-        -- Initialize trove
         BLATANT_MODE_TROVE = Trove_upvr.new()
         
         return true
@@ -490,43 +564,33 @@ local function InitializeBlatantFishing()
     end
 end
 
--- Fungsi yang menjalankan logika penyelesaian minigame secara instan (Blatant)
 local function AutoFishComplete(rodData, minigameData)
-    -- Blantant Mode: Delay reel (0 - 1.87)
     local reelDelay = blatantReelDelay
     if reelDelay > 0 then
         task.wait(reelDelay)
     end
     
-    -- Fishing Complete: Langsung tembak RemoteEvent "FishingCompleted" ke server.
     pcall(function()
         FISHING_COMPLETED_REMOTE:FireServer() 
     end)
     
-    print("⚡ Blatant Mode: Minigame Bypassed. Fish Retrieved.")
-
-    -- Delay Fishing Complete sebelum loop Fast Fishing kembali melempar
     if blatantFishingDelay > 0 then
         task.wait(blatantFishingDelay)
     end
 end
 
--- Fungsi HOOK untuk menimpa 'FishingRodStarted'
 local function HookFishingRodStarted(rodData, minigameData)
     if isBlatantActive then
-        -- Jika mode Blatant aktif, langsung selesaikan di thread terpisah
         task.spawn(function()
             AutoFishComplete(rodData, minigameData)
         end)
     else
-        -- Jika tidak aktif, jalankan fungsi asli
         if originalFishingRodStarted then
             originalFishingRodStarted(rodData, minigameData)
         end
     end
 end
 
--- Fungsi untuk mendapatkan mouse position yang aman
 local function GetSafeMousePosition()
     local UserInputService = game:GetService("UserInputService")
     local CurrentCamera = workspace.CurrentCamera
@@ -539,136 +603,55 @@ local function GetSafeMousePosition()
     end
 end
 
--- Approach 1: Menggunakan RequestChargeFishingRod dengan bypass
 local function BlatantCastMethod1()
     local success, result = pcall(function()
-        -- Set konfirmasi untuk bypass user input
         _G.confirmFishingInput = function() return true end
         
         local mousePos = GetSafeMousePosition()
         local skipCharge = true
         
-        -- Panggil RequestChargeFishingRod dengan parameter skip charge
         local castResult = module_upvr:RequestChargeFishingRod(mousePos, nil)
         
         _G.confirmFishingInput = nil
         return castResult
     end)
     
-    return success and result -- return success DAN result
+    return success and result
 end
 
--- Approach 2: Direct server call
-local function BlatantCastMethod2()
-    if not RequestFishingMinigameStarted_Net then
-        return false
-    end
-    
-    local success, result = pcall(function()
-        -- Get character position
-        local character = LocalPlayer.Character
-        if not character or not character:FindFirstChild("HumanoidRootPart") then
-            return false, "No character found"
-        end
-        
-        local throwPosition = character.HumanoidRootPart.Position + Vector3.new(0, -1, 10)
-        local power = 0.5
-        local castTime = workspace:GetServerTimeNow()
-        
-        local serverSuccess, serverResult = RequestFishingMinigameStarted_Net:InvokeServer(
-            throwPosition.Y,
-            power, 
-            castTime
-        )
-        
-        if serverSuccess then
-            -- Trigger FishingRodStarted manually
-            if module_upvr and module_upvr.FishingRodStarted then
-                module_upvr:FishingRodStarted(serverResult)
-            end
-            return true
-        else
-            return false, tostring(serverResult)
-        end
-    end)
-    
-    return success
-end
-
--- Approach 3: Menggunakan SendFishingRequestToServer langsung
-local function BlatantCastMethod3()
-    if not module_upvr or not module_upvr.SendFishingRequestToServer then
-        return false
-    end
-    
-    local success, result = pcall(function()
-        local mousePos = GetSafeMousePosition()
-        local power = 0.5
-        local skipCharge = true
-        
-        local sendSuccess, sendResult = module_upvr:SendFishingRequestToServer(mousePos, power, skipCharge)
-        return sendSuccess
-    end)
-    
-    return success
-end
-
--- Main blatant casting function yang mencoba method 1 dan 3
--- Main blatant casting function yang hanya menggunakan method 1
 local function BlatantCastFishingRod()
-    -- Coba method 1: RequestChargeFishingRod dengan bypass
     local success = BlatantCastMethod1()
     if success then
-        print("✅ Blatant Cast: Method 1 successful")
         return true
     end
-    
-    print("❌ Blatant Cast: Method 1 failed")
     return false
 end
--- =============================================================================
--- PERBAIKAN UTAMA: BlatantFishingLoop yang menggunakan multiple approaches
--- =============================================================================
 
 local function BlatantFishingLoop()
     while isBlatantActive do
         local castSuccess = BlatantCastFishingRod()
-        
-        if not castSuccess then
-            print("🔄 Retrying cast...")
-        end
-
-        -- Delay sebelum cast berikutnya
         task.wait(blatantFishingDelay)
     end
 end
 
--- Hook untuk RequestChargeFishingRod
 local function HookRequestChargeFishingRod(arg1, arg2, arg3)
     if isBlatantActive then
-        print("⚡ Blatant Mode: Fast casting via RequestChargeFishingRod")
-        
-        -- Di Blatant Mode, gunakan parameter untuk skip charging
         local mousePos = arg1 or GetSafeMousePosition()
         local skipCharge = true
-        
         return originalRequestChargeFishingRod(mousePos, arg2, skipCharge)
     else
         return originalRequestChargeFishingRod(arg1, arg2, arg3)
     end
 end
 
--- Hook untuk SendFishingRequestToServer
 local function HookSendFishingRequestToServer(mousePosition, power, skipCharge)
     if isBlatantActive then
-        print("⚡ Blatant Mode: SendFishingRequestToServer with forced parameters")
         return originalSendFishingRequestToServer(mousePosition, 0.5, true)
     else
         return originalSendFishingRequestToServer(mousePosition, power, skipCharge)
     end
 end
 
--- Fungsi untuk mengatur delay reel
 local function SetBlatantReelDelay(delay)
     if type(delay) == "number" and delay >= 0 and delay <= 1.87 then
         blatantReelDelay = delay
@@ -682,7 +665,6 @@ local function SetBlatantReelDelay(delay)
     return false
 end
 
--- Fungsi untuk mengatur delay fishing
 local function SetBlatantFishingDelay(delay)
     if type(delay) == "number" and delay >= 0 and delay <= 5 then
         blatantFishingDelay = delay
@@ -696,12 +678,10 @@ local function SetBlatantFishingDelay(delay)
     return false
 end
 
--- Fungsi publik untuk mengaktifkan/menonaktifkan Blatant Mode
 local function ToggleBlatantMode(enable)
     if enable == isBlatantActive then return end
     
     if enable then
-        -- Initialize system if not already initialized
         if not module_upvr or not FISHING_COMPLETED_REMOTE then
             if not InitializeBlatantFishing() then
                 return false
@@ -709,9 +689,7 @@ local function ToggleBlatantMode(enable)
         end
         
         isBlatantActive = true
-        print("✅ Blantant Mode (Fast Fishing): ENABLED.")
         
-        -- Terapkan Hook pada fungsi-fungsi fishing
         if module_upvr then
             if module_upvr.FishingRodStarted ~= HookFishingRodStarted then
                 module_upvr.FishingRodStarted = HookFishingRodStarted
@@ -725,7 +703,6 @@ local function ToggleBlatantMode(enable)
                 module_upvr.SendFishingRequestToServer = HookSendFishingRequestToServer
             end
             
-            -- Tambahkan fungsi pembersihan ke Trove
             if BLATANT_MODE_TROVE then
                 BLATANT_MODE_TROVE:Add(function() 
                     if module_upvr then
@@ -743,23 +720,19 @@ local function ToggleBlatantMode(enable)
             end
         end
         
-        -- Jalankan loop Fast Fishing
         if BLATANT_MODE_TROVE then
             BLATANT_MODE_TROVE:Add(task.spawn(BlatantFishingLoop))
         end
         
-        Notify({Title = "⚡ Blatant Fishing", Content = "Fast fishing mode activated - Instant casting and bypassing minigame", Duration = 3})
+        Notify({Title = "⚡ Blatant Fishing", Content = "Fast fishing mode activated", Duration = 3})
         
     else
         isBlatantActive = false
-        print("❌ Blantant Mode (Fast Fishing): DISABLED. Cleaning up...")
         
-        -- Cleanup
         if BLATANT_MODE_TROVE then
             BLATANT_MODE_TROVE:Clean()
         end
         
-        -- Restore original functions
         if module_upvr then
             if originalFishingRodStarted then
                 module_upvr.FishingRodStarted = originalFishingRodStarted
@@ -778,7 +751,6 @@ local function ToggleBlatantMode(enable)
     return true
 end
 
--- Manual fishing function untuk testing
 local function ManualBlatantFish()
     if not isBlatantActive then
         Notify({Title = "Blatant Fishing", Content = "Please enable Blatant Mode first", Duration = 3})
@@ -795,7 +767,232 @@ local function ManualBlatantFish()
     end)
 end
 
--- Network Communication untuk Auto Fishing biasa
+-- =============================================================================
+-- WEATHER MACHINE SYSTEM
+-- =============================================================================
+
+local function LoadWeatherData()
+    local success, result = pcall(function()
+        local EventUtility = require(ReplicatedStorage.Shared.EventUtility)
+        local StringLibrary = require(ReplicatedStorage.Shared.StringLibrary)
+        local Events = require(ReplicatedStorage.Events)
+        
+        local weatherList = {}
+        
+        for name, data in pairs(Events) do
+            local event = EventUtility:GetEvent(name)
+            if event and event.WeatherMachine and event.WeatherMachinePrice then
+                table.insert(weatherList, {
+                    Name = event.Name or name,
+                    InternalName = name,
+                    Price = event.WeatherMachinePrice,
+                    DisplayName = string.format("%s - %s Coins", event.Name or name, StringLibrary:AddCommas(event.WeatherMachinePrice))
+                })
+            end
+        end
+        
+        table.sort(weatherList, function(a, b)
+            return a.Price < b.Price
+        end)
+        
+        return weatherList
+    end)
+    
+    if success then
+        return result
+    else
+        return {}
+    end
+end
+
+local function PurchaseWeather(weatherName)
+    local success, result = pcall(function()
+        local Net = require(ReplicatedStorage.Packages.Net)
+        local PurchaseWeatherEvent = Net:RemoteFunction("PurchaseWeatherEvent")
+        local purchaseResult = PurchaseWeatherEvent:InvokeServer(weatherName)
+        return purchaseResult
+    end)
+    
+    return success, result
+end
+
+local function BuySelectedWeathers()
+    if not next(selectedWeathers) then
+        Notify({
+            Title = "Weather Purchase",
+            Content = "No weathers selected!",
+            Duration = 3
+        })
+        return
+    end
+    
+    local totalPurchases = 0
+    local successfulPurchases = 0
+    
+    Notify({
+        Title = "Weather Purchase",
+        Content = "Processing purchases...",
+        Duration = 2
+    })
+    
+    for weatherName, selected in pairs(selectedWeathers) do
+        if selected then
+            totalPurchases = totalPurchases + 1
+            
+            local weatherData
+            for _, weather in ipairs(availableWeathers) do
+                if weather.InternalName == weatherName then
+                    weatherData = weather
+                    break
+                end
+            end
+            
+            if weatherData then
+                local success, result = PurchaseWeather(weatherName)
+                if success and result then
+                    successfulPurchases = successfulPurchases + 1
+                end
+            end
+            
+            task.wait(0.5)
+        end
+    end
+    
+    selectedWeathers = {}
+    
+    Notify({
+        Title = "Purchase Complete",
+        Content = string.format("Successfully purchased %d/%d weathers", successfulPurchases, totalPurchases),
+        Duration = 4
+    })
+end
+
+local function RefreshWeatherList()
+    availableWeathers = LoadWeatherData()
+    local weatherOptions = {}
+    for _, weather in ipairs(availableWeathers) do
+        table.insert(weatherOptions, weather.DisplayName)
+    end
+    return weatherOptions, availableWeathers
+end
+
+local function ToggleWeatherSelection(weatherIndex, state)
+    if availableWeathers[weatherIndex] then
+        local weather = availableWeathers[weatherIndex]
+        selectedWeathers[weather.InternalName] = state
+    end
+end
+
+-- =============================================================================
+-- TRICK OR TREAT SYSTEM
+-- =============================================================================
+
+local function GetSpecialDialogueRemote()
+    local success, result = pcall(function()
+        local Net = require(ReplicatedStorage.Packages.Net)
+        local SpecialDialogueEvent = Net:RemoteFunction("SpecialDialogueEvent")
+        return SpecialDialogueEvent
+    end)
+    
+    if success then
+        return result
+    else
+        return nil
+    end
+end
+
+local function FindTrickOrTreatDoors()
+    local doors = {}
+    
+    for _, door in pairs(workspace:GetDescendants()) do
+        if door:IsA("Model") and door:FindFirstChild("Root") and door:FindFirstChild("Door") and door.Name then
+            if door:GetAttribute("TrickOrTreatDoor") or string.find(door.Name, "House") then
+                table.insert(doors, door)
+            end
+        end
+    end
+    
+    return doors
+end
+
+local function KnockDoor(door)
+    local success, result = pcall(function()
+        local SpecialDialogueEvent = GetSpecialDialogueRemote()
+        if not SpecialDialogueEvent then
+            return false, "Remote not found"
+        end
+        
+        local success, reward = SpecialDialogueEvent:InvokeServer(door.Name, "TrickOrTreatHouse")
+        return success, reward
+    end)
+    
+    return success, result
+end
+
+local function StartAutoTrickTreat()
+    if autoTrickTreatEnabled then return end
+    autoTrickTreatEnabled = true
+    
+    trickTreatLoop = task.spawn(function()
+        while autoTrickTreatEnabled do
+            local doors = FindTrickOrTreatDoors()
+            
+            if #doors > 0 then
+                for _, door in ipairs(doors) do
+                    if not autoTrickTreatEnabled then break end
+                    pcall(KnockDoor, door)
+                    task.wait(0.5)
+                end
+            end
+            
+            task.wait(10)
+        end
+    end)
+end
+
+local function StopAutoTrickTreat()
+    if not autoTrickTreatEnabled then return end
+    autoTrickTreatEnabled = false
+    
+    if trickTreatLoop then
+        task.cancel(trickTreatLoop)
+        trickTreatLoop = nil
+    end
+end
+
+local function ManualKnockAllDoors()
+    local doors = FindTrickOrTreatDoors()
+    
+    if #doors == 0 then
+        Notify({
+            Title = "🎃 Trick or Treat",
+            Content = "No Trick or Treat doors found!",
+            Duration = 3
+        })
+        return
+    end
+    
+    local successfulKnocks = 0
+    
+    for _, door in ipairs(doors) do
+        local success, result = KnockDoor(door)
+        if success then
+            successfulKnocks = successfulKnocks + 1
+        end
+        task.wait(0.5)
+    end
+    
+    Notify({
+        Title = "🎃 Knock Complete",
+        Content = string.format("Success: %d/%d doors", successfulKnocks, #doors),
+        Duration = 4
+    })
+end
+
+-- =============================================================================
+-- AUTO FISHING SYSTEM
+-- =============================================================================
+
 local function GetAutoFishRemote()
     local ok, NetModule = pcall(function()
         local folder = ReplicatedStorage:WaitForChild(NET_PACKAGES_FOLDER, 5)
@@ -836,308 +1033,9 @@ local function SafeInvokeAutoFishing(state)
     end)
 end
 
--- =============================================================================
--- WEATHER MACHINE SYSTEM
--- =============================================================================
-
-local function LoadWeatherData()
-    local success, result = pcall(function()
-        -- Load required modules
-        local EventUtility = require(ReplicatedStorage.Shared.EventUtility)
-        local StringLibrary = require(ReplicatedStorage.Shared.StringLibrary)
-        local Events = require(ReplicatedStorage.Events)
-        
-        local weatherList = {}
-        
-        -- Iterate through all events to find weather machines
-        for name, data in pairs(Events) do
-            local event = EventUtility:GetEvent(name)
-            if event and event.WeatherMachine and event.WeatherMachinePrice then
-                table.insert(weatherList, {
-                    Name = event.Name or name,
-                    InternalName = name,
-                    Price = event.WeatherMachinePrice,
-                    DisplayName = string.format("%s - %s Coins", event.Name or name, StringLibrary:AddCommas(event.WeatherMachinePrice))
-                })
-            end
-        end
-        
-        -- Sort by price (ascending)
-        table.sort(weatherList, function(a, b)
-            return a.Price < b.Price
-        end)
-        
-        return weatherList
-    end)
-    
-    if success then
-        return result
-    else
-        warn("⚠️ Failed to load weather data:", result)
-        return {}
-    end
-end
-
-local function PurchaseWeather(weatherName)
-    local success, result = pcall(function()
-        -- Load required modules
-        local Net = require(ReplicatedStorage.Packages.Net)
-        local PurchaseWeatherEvent = Net:RemoteFunction("PurchaseWeatherEvent")
-        
-        -- Purchase the weather
-        local purchaseResult = PurchaseWeatherEvent:InvokeServer(weatherName)
-        return purchaseResult
-    end)
-    
-    return success, result
-end
-
-local function BuySelectedWeathers()
-    if not next(selectedWeathers) then
-        Notify({
-            Title = "Weather Purchase",
-            Content = "No weathers selected!",
-            Duration = 3
-        })
-        return
-    end
-    
-    local totalPurchases = 0
-    local successfulPurchases = 0
-    
-    Notify({
-        Title = "Weather Purchase",
-        Content = "Processing purchases...",
-        Duration = 2
-    })
-    
-    for weatherName, selected in pairs(selectedWeathers) do
-        if selected then
-            totalPurchases = totalPurchases + 1
-            
-            -- Find weather data
-            local weatherData
-            for _, weather in ipairs(availableWeathers) do
-                if weather.InternalName == weatherName then
-                    weatherData = weather
-                    break
-                end
-            end
-            
-            if weatherData then
-                local success, result = PurchaseWeather(weatherName)
-                if success and result then
-                    successfulPurchases = successfulPurchases + 1
-                    Notify({
-                        Title = "✅ Purchase Successful",
-                        Content = string.format("Bought: %s", weatherData.Name),
-                        Duration = 3
-                    })
-                else
-                    Notify({
-                        Title = "❌ Purchase Failed",
-                        Content = string.format("Failed to buy: %s", weatherData.Name),
-                        Duration = 4
-                    })
-                end
-            end
-            
-            -- Small delay between purchases
-            task.wait(0.5)
-        end
-    end
-    
-    -- Clear selection after purchase
-    selectedWeathers = {}
-    
-    Notify({
-        Title = "Purchase Complete",
-        Content = string.format("Successfully purchased %d/%d weathers", successfulPurchases, totalPurchases),
-        Duration = 4
-    })
-end
-
-local function RefreshWeatherList()
-    availableWeathers = LoadWeatherData()
-    
-    -- Create display options for dropdown
-    local weatherOptions = {}
-    for _, weather in ipairs(availableWeathers) do
-        table.insert(weatherOptions, weather.DisplayName)
-    end
-    
-    return weatherOptions, availableWeathers
-end
-
-local function ToggleWeatherSelection(weatherIndex, state)
-    if availableWeathers[weatherIndex] then
-        local weather = availableWeathers[weatherIndex]
-        selectedWeathers[weather.InternalName] = state
-        
-        Notify({
-            Title = state and "✅ Weather Selected" or "❌ Weather Deselected",
-            Content = string.format("%s %s", weather.Name, state and "selected" or "deselected"),
-            Duration = 2
-        })
-    end
-end
-
--- =============================================================================
--- TRICK OR TREAT SYSTEM
--- =============================================================================
-
-local function GetSpecialDialogueRemote()
-    local success, result = pcall(function()
-        local Net = require(ReplicatedStorage.Packages.Net)
-        local SpecialDialogueEvent = Net:RemoteFunction("SpecialDialogueEvent")
-        return SpecialDialogueEvent
-    end)
-    
-    if success then
-        return result
-    else
-        warn("❌ Failed to load SpecialDialogueEvent:", result)
-        return nil
-    end
-end
-
-local function FindTrickOrTreatDoors()
-    local doors = {}
-    
-    for _, door in pairs(workspace:GetDescendants()) do
-        if door:IsA("Model") and door:FindFirstChild("Root") and door:FindFirstChild("Door") and door.Name then
-            if door:GetAttribute("TrickOrTreatDoor") or string.find(door.Name, "House") then
-                table.insert(doors, door)
-            end
-        end
-    end
-    
-    return doors
-end
-
-local function KnockDoor(door)
-    local success, result = pcall(function()
-        local SpecialDialogueEvent = GetSpecialDialogueRemote()
-        if not SpecialDialogueEvent then
-            return false, "Remote not found"
-        end
-        
-        local success, reward = SpecialDialogueEvent:InvokeServer(door.Name, "TrickOrTreatHouse")
-        return success, reward
-    end)
-    
-    return success, result
-end
-
-local function StartAutoTrickTreat()
-    if autoTrickTreatEnabled then return end
-    autoTrickTreatEnabled = true
-    
-    Notify({
-        Title = "🎃 Auto Trick or Treat",
-        Content = "System activated - Knocking all doors...",
-        Duration = 3
-    })
-    
-    trickTreatLoop = task.spawn(function()
-        while autoTrickTreatEnabled do
-            local doors = FindTrickOrTreatDoors()
-            
-            if #doors > 0 then
-                Notify({
-                    Title = "🎃 Trick or Treat",
-                    Content = string.format("Found %d doors, knocking...", #doors),
-                    Duration = 2
-                })
-                
-                for _, door in ipairs(doors) do
-                    if not autoTrickTreatEnabled then break end
-                    
-                    local success, result = KnockDoor(door)
-                    if success then
-                        if result == "Trick" then
-                            print("[🎃] Trick dari " .. door.Name)
-                        elseif result == "Treat" then
-                            print("[🍬] Treat dari " .. door.Name .. " → +" .. tostring(result) .. " Candy Corns")
-                        else
-                            print("[❌] Gagal interaksi dengan " .. door.Name)
-                        end
-                    else
-                        print("[❌] Error knocking " .. door.Name .. ": " .. tostring(result))
-                    end
-                    
-                    task.wait(0.5) -- Jeda biar gak spam server
-                end
-            else
-                print("[🔍] Tidak ada Trick or Treat doors yang ditemukan")
-            end
-            
-            -- Tunggu sebelum scan ulang
-            task.wait(10)
-        end
-    end)
-end
-
-local function StopAutoTrickTreat()
-    if not autoTrickTreatEnabled then return end
-    autoTrickTreatEnabled = false
-    
-    if trickTreatLoop then
-        task.cancel(trickTreatLoop)
-        trickTreatLoop = nil
-    end
-    
-    Notify({
-        Title = "🎃 Auto Trick or Treat",
-        Content = "System deactivated",
-        Duration = 2
-    })
-end
-
-local function ManualKnockAllDoors()
-    local doors = FindTrickOrTreatDoors()
-    
-    if #doors == 0 then
-        Notify({
-            Title = "🎃 Trick or Treat",
-            Content = "No Trick or Treat doors found!",
-            Duration = 3
-        })
-        return
-    end
-    
-    Notify({
-        Title = "🎃 Manual Knock",
-        Content = string.format("Knocking %d doors...", #doors),
-        Duration = 2
-    })
-    
-    local successfulKnocks = 0
-    local totalCandy = 0
-    
-    for _, door in ipairs(doors) do
-        local success, result = KnockDoor(door)
-        if success then
-            successfulKnocks = successfulKnocks + 1
-            if result == "Treat" then
-                totalCandy = totalCandy + 1
-            end
-        end
-        task.wait(0.5)
-    end
-    
-    Notify({
-        Title = "🎃 Knock Complete",
-        Content = string.format("Success: %d/%d doors | Candy: +%d", successfulKnocks, #doors, totalCandy),
-        Duration = 4
-    })
-end
-
--- Auto Fishing System
 local function StartAutoFish()
     if autoFishEnabled then return end
     autoFishEnabled = true
-    Notify({Title = "Auto Fishing", Content = "System activated successfully", Duration = 2})
 
     autoFishLoopThread = task.spawn(function()
         while autoFishEnabled do
@@ -1152,7 +1050,6 @@ end
 local function StopAutoFish()
     if not autoFishEnabled then return end
     autoFishEnabled = false
-    Notify({Title = "Auto Fishing", Content = "System deactivated", Duration = 2})
     
     pcall(function()
         SafeInvokeAutoFishing(false)
@@ -1160,10 +1057,9 @@ local function StopAutoFish()
 end
 
 -- =============================================================================
--- ULTRA ANTI LAG SYSTEM - WHITE TEXTURE MODE
+-- ANTI LAG SYSTEM
 -- =============================================================================
 
--- Save original graphics settings
 local function SaveOriginalGraphics()
     originalGraphicsSettings = {
         GraphicsQualityLevel = UserGameSettings.GraphicsQualityLevel,
@@ -1177,32 +1073,27 @@ local function SaveOriginalGraphics()
     }
 end
 
--- Ultra Anti Lag System - White Texture Mode
 local function EnableAntiLag()
     if antiLagEnabled then return end
     
     SaveOriginalGraphics()
     antiLagEnabled = true
     
-    -- Extreme graphics optimization with white textures
     pcall(function()
-        -- Graphics quality settings
         UserGameSettings.GraphicsQualityLevel = 1
         UserGameSettings.SavedQualityLevel = Enum.SavedQualitySetting.QualityLevel1
         
-        -- Lighting optimization - Bright white environment
         Lighting.GlobalShadows = false
         Lighting.FogEnd = 999999
-        Lighting.Brightness = 5  -- Extra bright
+        Lighting.Brightness = 5
         Lighting.ShadowSoftness = 0
         Lighting.EnvironmentDiffuseScale = 1
         Lighting.EnvironmentSpecularScale = 0
-        Lighting.OutdoorAmbient = Color3.new(1, 1, 1)  -- Pure white ambient
-        Lighting.Ambient = Color3.new(1, 1, 1)  -- Pure white
+        Lighting.OutdoorAmbient = Color3.new(1, 1, 1)
+        Lighting.Ambient = Color3.new(1, 1, 1)
         Lighting.ColorShift_Bottom = Color3.new(1, 1, 1)
         Lighting.ColorShift_Top = Color3.new(1, 1, 1)
         
-        -- Terrain optimization - White terrain
         if workspace.Terrain then
             workspace.Terrain.Decoration = false
             workspace.Terrain.WaterReflectance = 0
@@ -1211,10 +1102,8 @@ local function EnableAntiLag()
             workspace.Terrain.WaterWaveSpeed = 0
         end
         
-        -- Make all parts white and disable effects
         for _, obj in ipairs(workspace:GetDescendants()) do
             if obj:IsA("Part") or obj:IsA("MeshPart") or obj:IsA("UnionOperation") then
-                -- Set all parts to white
                 if obj:FindFirstChildOfClass("Texture") then
                     obj:FindFirstChildOfClass("Texture"):Destroy()
                 end
@@ -1224,35 +1113,23 @@ local function EnableAntiLag()
                 obj.Material = Enum.Material.SmoothPlastic
                 obj.BrickColor = BrickColor.new("White")
                 obj.Reflectance = 0
-            elseif obj:IsA("ParticleEmitter") then
-                obj.Enabled = false
-            elseif obj:IsA("Fire") then
-                obj.Enabled = false
-            elseif obj:IsA("Smoke") then
-                obj.Enabled = false
-            elseif obj:IsA("Sparkles") then
-                obj.Enabled = false
-            elseif obj:IsA("Beam") then
-                obj.Enabled = false
-            elseif obj:IsA("Trail") then
+            elseif obj:IsA("ParticleEmitter") or obj:IsA("Fire") or obj:IsA("Smoke") or obj:IsA("Sparkles") or obj:IsA("Beam") or obj:IsA("Trail") then
                 obj.Enabled = false
             elseif obj:IsA("Sound") and not obj:FindFirstAncestorWhichIsA("Player") then
                 obj:Stop()
             end
         end
         
-        -- Reduce texture quality to minimum
         settings().Rendering.QualityLevel = 1
     end)
     
-    Notify({Title = "Ultra Anti Lag", Content = "White texture mode enabled - Maximum performance", Duration = 3})
+    Notify({Title = "Ultra Anti Lag", Content = "White texture mode enabled", Duration = 3})
 end
 
 local function DisableAntiLag()
     if not antiLagEnabled then return end
     antiLagEnabled = false
     
-    -- Restore original graphics settings
     pcall(function()
         if originalGraphicsSettings.GraphicsQualityLevel then
             UserGameSettings.GraphicsQualityLevel = originalGraphicsSettings.GraphicsQualityLevel
@@ -1279,7 +1156,6 @@ local function DisableAntiLag()
             Lighting.EnvironmentSpecularScale = originalGraphicsSettings.EnvironmentSpecularScale
         end
         
-        -- Restore terrain
         if workspace.Terrain then
             workspace.Terrain.Decoration = true
             workspace.Terrain.WaterReflectance = 0.5
@@ -1288,29 +1164,25 @@ local function DisableAntiLag()
             workspace.Terrain.WaterWaveSpeed = 10
         end
         
-        -- Restore lighting
         Lighting.OutdoorAmbient = Color3.new(0.5, 0.5, 0.5)
         Lighting.Ambient = Color3.new(0.5, 0.5, 0.5)
         Lighting.ColorShift_Bottom = Color3.new(0, 0, 0)
         Lighting.ColorShift_Top = Color3.new(0, 0, 0)
         
-        -- Restore texture quality
         settings().Rendering.QualityLevel = 10
     end)
     
     Notify({Title = "Anti Lag", Content = "Graphics settings restored", Duration = 3})
 end
 
--- Position Management System
+-- =============================================================================
+-- POSITION MANAGEMENT
+-- =============================================================================
+
 local function SaveCurrentPosition()
     local character = LocalPlayer.Character
     if character and character:FindFirstChild("HumanoidRootPart") then
         lastSavedPosition = character.HumanoidRootPart.Position
-        Notify({
-            Title = "Position Saved", 
-            Content = string.format("Position saved successfully"),
-            Duration = 2
-        })
         return true
     end
     return false
@@ -1318,14 +1190,12 @@ end
 
 local function LoadSavedPosition()
     if not lastSavedPosition then
-        Notify({Title = "Load Failed", Content = "No position saved", Duration = 2})
         return false
     end
     
     local character = LocalPlayer.Character
     if character and character:FindFirstChild("HumanoidRootPart") then
         character.HumanoidRootPart.CFrame = CFrame.new(lastSavedPosition)
-        Notify({Title = "Position Loaded", Content = "Teleported to saved position", Duration = 2})
         return true
     end
     return false
@@ -1353,8 +1223,6 @@ local function StartLockPosition()
             end
         end
     end)
-    
-    Notify({Title = "Position Lock", Content = "Player position locked", Duration = 2})
 end
 
 local function StopLockPosition()
@@ -1365,33 +1233,26 @@ local function StopLockPosition()
         lockPositionLoop:Disconnect()
         lockPositionLoop = nil
     end
-    
-    Notify({Title = "Position Lock", Content = "Player position unlocked", Duration = 2})
 end
 
 -- =============================================================================
--- BYPASS SYSTEM - FISHING RADAR, DIVING GEAR & AUTO SELL
+-- BYPASS SYSTEM
 -- =============================================================================
 
--- Fishing Radar System
 local function ToggleFishingRadar()
     local success, result = pcall(function()
-        -- Load required modules
         local Replion = require(ReplicatedStorage.Packages.Replion)
         local Net = require(ReplicatedStorage.Packages.Net)
         local UpdateFishingRadar = Net:RemoteFunction("UpdateFishingRadar")
         
-        -- Get player data
         local Data = Replion.Client:WaitReplion("Data")
         if not Data then
             return false, "Data Replion tidak ditemukan!"
         end
 
-        -- Get current radar state
         local currentState = Data:Get("RegionsVisible")
         local desiredState = not currentState
 
-        -- Invoke server to update radar
         local invokeSuccess = UpdateFishingRadar:InvokeServer(desiredState)
         
         if invokeSuccess then
@@ -1415,9 +1276,6 @@ local function StartFishingRadar()
     local success, message = ToggleFishingRadar()
     if success then
         fishingRadarEnabled = true
-        Notify({Title = "Fishing Radar", Content = message, Duration = 3})
-    else
-        Notify({Title = "Radar Error", Content = message, Duration = 4})
     end
 end
 
@@ -1427,42 +1285,32 @@ local function StopFishingRadar()
     local success, message = ToggleFishingRadar()
     if success then
         fishingRadarEnabled = false
-        Notify({Title = "Fishing Radar", Content = message, Duration = 3})
-    else
-        Notify({Title = "Radar Error", Content = message, Duration = 4})
     end
 end
 
--- Diving Gear System
 local function ToggleDivingGear()
     local success, result = pcall(function()
-        -- Load required modules
         local Net = require(ReplicatedStorage.Packages.Net)
         local Replion = require(ReplicatedStorage.Packages.Replion)
         local ItemUtility = require(ReplicatedStorage.Shared.ItemUtility)
         
-        -- Get diving gear data
         local DivingGear = ItemUtility.GetItemDataFromItemType("Gears", "Diving Gear")
         if not DivingGear then
             return false, "Diving Gear tidak ditemukan!"
         end
 
-        -- Get player data
         local Data = Replion.Client:WaitReplion("Data")
         if not Data then
             return false, "Data Replion tidak ditemukan!"
         end
 
-        -- Get remote functions
         local UnequipOxygenTank = Net:RemoteFunction("UnequipOxygenTank")
         local EquipOxygenTank = Net:RemoteFunction("EquipOxygenTank")
 
-        -- Check current equipment state
         local EquippedId = Data:Get("EquippedOxygenTankId")
         local isEquipped = EquippedId == DivingGear.Data.Id
         local success
 
-        -- Toggle equipment
         if isEquipped then
             success = UnequipOxygenTank:InvokeServer()
         else
@@ -1490,9 +1338,6 @@ local function StartDivingGear()
     local success, message = ToggleDivingGear()
     if success then
         divingGearEnabled = true
-        Notify({Title = "Diving Gear", Content = message, Duration = 3})
-    else
-        Notify({Title = "Diving Gear Error", Content = message, Duration = 4})
     end
 end
 
@@ -1502,13 +1347,9 @@ local function StopDivingGear()
     local success, message = ToggleDivingGear()
     if success then
         divingGearEnabled = false
-        Notify({Title = "Diving Gear", Content = message, Duration = 3})
-    else
-        Notify({Title = "Diving Gear Error", Content = message, Duration = 4})
     end
 end
 
--- Auto Sell System
 local function ManualSellAllFish()
     local success, result = pcall(function()
         local VendorController = require(ReplicatedStorage.Controllers.VendorController)
@@ -1522,8 +1363,6 @@ local function ManualSellAllFish()
     
     if success then
         Notify({Title = "Manual Sell", Content = result, Duration = 3})
-    else
-        Notify({Title = "Sell Error", Content = result, Duration = 4})
     end
 end
 
@@ -1548,24 +1387,13 @@ local function StartAutoSell()
                         
                         if fishCount >= autoSellThreshold then
                             VendorController:SellAllItems()
-                            Notify({
-                                Title = "Auto Sell", 
-                                Content = string.format("Sold %d fish automatically", fishCount),
-                                Duration = 2
-                            })
                         end
                     end
                 end
             end)
-            task.wait(2) -- Check every 2 seconds
+            task.wait(2)
         end
     end)
-    
-    Notify({
-        Title = "Auto Sell Started", 
-        Content = string.format("Auto selling when fish count >= %d", autoSellThreshold),
-        Duration = 3
-    })
 end
 
 local function StopAutoSell()
@@ -1576,44 +1404,20 @@ local function StopAutoSell()
         task.cancel(autoSellLoop)
         autoSellLoop = nil
     end
-    
-    Notify({Title = "Auto Sell", Content = "Auto sell stopped", Duration = 2})
 end
 
 local function SetAutoSellThreshold(amount)
     if type(amount) == "number" and amount > 0 then
         autoSellThreshold = amount
-        Notify({
-            Title = "Auto Sell Threshold", 
-            Content = string.format("Threshold set to %d fish", amount),
-            Duration = 3
-        })
         return true
     end
     return false
 end
 
--- Auto Radar Toggle with safety
-local function SafeToggleRadar()
-    local success, message = ToggleFishingRadar()
-    if success then
-        Notify({Title = "Fishing Radar", Content = message, Duration = 3})
-    else
-        Notify({Title = "Radar Error", Content = message, Duration = 4})
-    end
-end
+-- =============================================================================
+-- COORDINATE DISPLAY
+-- =============================================================================
 
--- Auto Diving Gear Toggle with safety
-local function SafeToggleDivingGear()
-    local success, message = ToggleDivingGear()
-    if success then
-        Notify({Title = "Diving Gear", Content = message, Duration = 3})
-    else
-        Notify({Title = "Diving Gear Error", Content = message, Duration = 4})
-    end
-end
-
--- Coordinate Display System
 local function CreateCoordinateDisplay()
     if coordinateGui and coordinateGui.Parent then coordinateGui:Destroy() end
     
@@ -1932,7 +1736,12 @@ BypassTab:Toggle({
 BypassTab:Button({
     Title = "Toggle Radar",
     Icon = "radar",
-    Callback = SafeToggleRadar
+    Callback = function()
+        local success, message = ToggleFishingRadar()
+        if success then
+            Notify({Title = "Fishing Radar", Content = message, Duration = 3})
+        end
+    end
 })
 
 BypassTab:Space()
@@ -1960,7 +1769,12 @@ BypassTab:Toggle({
 BypassTab:Button({
     Title = "Toggle Diving Gear",
     Icon = "diving",
-    Callback = SafeToggleDivingGear
+    Callback = function()
+        local success, message = ToggleDivingGear()
+        if success then
+            Notify({Title = "Diving Gear", Content = message, Duration = 3})
+        end
+    end
 })
 
 BypassTab:Space()
@@ -2102,7 +1916,7 @@ PlayerConfigTab:Toggle({
 
 PlayerConfigTab:Space()
 
--- Anti AFK Section - DITAMBAHKAN DI PLAYER CONFIG
+-- Anti AFK Section
 PlayerConfigTab:Section({
     Title = "Anti AFK System",
     TextSize = 20,
@@ -2121,7 +1935,7 @@ PlayerConfigTab:Toggle({
 
 PlayerConfigTab:Space()
 
--- ========== DISPLAY NAME SYSTEM SECTION ==========
+-- Display Name System Section
 PlayerConfigTab:Section({
     Title = "Display Name System",
     TextSize = 20,
@@ -2187,13 +2001,23 @@ PlayerConfigTab:Section({
 PlayerConfigTab:Button({
     Title = "Save Position",
     Icon = "bookmark",
-    Callback = SaveCurrentPosition
+    Callback = function()
+        if SaveCurrentPosition() then
+            Notify({Title = "Position Saved", Content = "Position saved successfully", Duration = 2})
+        end
+    end
 })
 
 PlayerConfigTab:Button({
     Title = "Load Position",
     Icon = "navigation",
-    Callback = LoadSavedPosition
+    Callback = function()
+        if LoadSavedPosition() then
+            Notify({Title = "Position Loaded", Content = "Teleported to saved position", Duration = 2})
+        else
+            Notify({Title = "Load Failed", Content = "No position saved", Duration = 2})
+        end
+    end
 })
 
 PlayerConfigTab:Toggle({
@@ -2204,15 +2028,17 @@ PlayerConfigTab:Toggle({
     Callback = function(state)
         if state then
             StartLockPosition()
+            Notify({Title = "Position Lock", Content = "Player position locked", Duration = 2})
         else
             StopLockPosition()
+            Notify({Title = "Position Lock", Content = "Player position unlocked", Duration = 2})
         end
     end
 })
 
 PlayerConfigTab:Space()
 
--- Movement Configuration - DIPINDAHKAN DARI PLAYER STATS
+-- Movement Configuration
 PlayerConfigTab:Section({
     Title = "Movement Configuration",
     TextSize = 20,
@@ -2297,7 +2123,6 @@ TeleportTab:Section({
     Desc = "Quick teleport to fishing spots",
 })
 
--- DROPDOWN UNTUK MAP TELEPORT - DITAMBAHKAN LOKASI BARU
 TeleportTab:Dropdown({
     Title = "Select Destination",
     Flag = "MapSelect",
@@ -2320,14 +2145,12 @@ TeleportTab:Dropdown({
     end
 })
 
--- BUTTON TELEPORT - DITAMBAHKAN FUNGSI TELEPORT KE LOKASI BARU
 TeleportTab:Button({
     Title = "Teleport Now",
     Icon = "navigation",
     Callback = function()
         local targetPosition
         
-        -- Tentukan posisi berdasarkan pilihan
         if currentSelectedMap == "Kohana" then
             targetPosition = Vector3.new(-637, 16, 626)
         elseif currentSelectedMap == "Kohana Volcano" then
@@ -2351,11 +2174,9 @@ TeleportTab:Button({
         elseif currentSelectedMap == "Fishermand Iland" then
             targetPosition = Vector3.new(-26, 9, 2688)
         else
-            -- Default position jika tidak ada yang cocok
             targetPosition = Vector3.new(-637, 16, 626)
         end
         
-        -- Eksekusi teleport
         if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
             LocalPlayer.Character.HumanoidRootPart.CFrame = CFrame.new(targetPosition)
             Notify({
@@ -2466,7 +2287,7 @@ SettingsTab:Label({
 -- Initial Notification
 Notify({
     Title = "Anggazyy Hub Ready", 
-    Content = "WindUI System initialized successfully with UPDATED Blatant Fishing + Display Name System",
+    Content = "WindUI System initialized successfully with FIXED Display Name & UI Systems",
     Duration = 4
 })
 
