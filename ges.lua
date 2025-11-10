@@ -110,7 +110,7 @@ local WindUI = loadstring(game:HttpGet("https://raw.githubusercontent.com/Footag
 task.spawn(function()
     task.wait(1) -- Tunggu sebentar agar UI siap
     WindUI:Popup({
-        Title = "ini anggazyy boskuu?!",
+        Title = "KONTOLLLS?!",
         Icon = "fish",
         Content = "Thank you for using Anggazyy Hub - Fish It Automation\n\nScript ini 100% Gratis dan tidak diperjualbelikan",
         Buttons = {
@@ -342,10 +342,6 @@ end
 
 -- Approach 1: Menggunakan RequestChargeFishingRod dengan bypass
 local function BlatantCastMethod1()
-    if not module_upvr or not module_upvr.RequestChargeFishingRod then
-        return false
-    end
-    
     local success, result = pcall(function()
         -- Set konfirmasi untuk bypass user input
         _G.confirmFishingInput = function() return true end
@@ -354,13 +350,13 @@ local function BlatantCastMethod1()
         local skipCharge = true
         
         -- Panggil RequestChargeFishingRod dengan parameter skip charge
-        local castResult = module_upvr:RequestChargeFishingRod(mousePos, nil, skipCharge)
+        local castResult = module_upvr:RequestChargeFishingRod(mousePos, nil)
         
         _G.confirmFishingInput = nil
         return castResult
     end)
     
-    return success
+    return success and result -- return success DAN result
 end
 
 -- Approach 2: Direct server call
