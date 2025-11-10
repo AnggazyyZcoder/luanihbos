@@ -12,19 +12,6 @@ local Lighting = game:GetService("Lighting")
 local UserGameSettings = UserSettings():GetService("UserGameSettings")
 local LocalPlayer = Players.LocalPlayer
 
--- Import required modules
-local Signal = require(ReplicatedStorage.Packages.Signal)
-local Trove = require(ReplicatedStorage.Packages.Trove)
-local Net = require(ReplicatedStorage.Packages.Net)
-local spr = require(ReplicatedStorage.Packages.spr)
-local Constants = require(ReplicatedStorage.Shared.Constants)
-local Soundbook = require(ReplicatedStorage.Shared.Soundbook)
-local GuiControl = require(ReplicatedStorage.Modules.GuiControl)
-local HUDController = require(ReplicatedStorage.Controllers.HUDController)
-local AnimationController = require(ReplicatedStorage.Controllers.AnimationController)
-local TextNotificationController = require(ReplicatedStorage.Controllers.TextNotificationController)
-local BlockedHumanoidStates = require(ReplicatedStorage.Shared.BlockedHumanoidStates)
-
 -- UI Variables
 local PlayerGui = LocalPlayer.PlayerGui
 local Charge_upvr = PlayerGui:WaitForChild("Charge")
@@ -110,7 +97,7 @@ local WindUI = loadstring(game:HttpGet("https://raw.githubusercontent.com/Footag
 task.spawn(function()
     task.wait(1) -- Tunggu sebentar agar UI siap
     WindUI:Popup({
-        Title = "ANJINKKKK?!",
+        Title = "Anggazyy Hub - Fish It",
         Icon = "fish",
         Content = "Thank you for using Anggazyy Hub - Fish It Automation\n\nScript ini 100% Gratis dan tidak diperjualbelikan",
         Buttons = {
@@ -139,42 +126,48 @@ local function OverrideDisplayNameVisual()
     
     -- Override properti DisplayName secara lokal
     local function overrideDisplayName()
-        local mt = getrawmetatable(LocalPlayer)
-        local oldIndex = mt.__index
-        
-        setreadonly(mt, false)
-        
-        mt.__index = newcclosure(function(self, key)
-            if key == "DisplayName" and displayNameEnabled and customDisplayName ~= "" then
-                return customDisplayName
-            end
-            return oldIndex(self, key)
+        pcall(function()
+            local mt = getrawmetatable(LocalPlayer)
+            local oldIndex = mt.__index
+            
+            setreadonly(mt, false)
+            
+            mt.__index = newcclosure(function(self, key)
+                if key == "DisplayName" and displayNameEnabled and customDisplayName ~= "" then
+                    return customDisplayName
+                end
+                return oldIndex(self, key)
+            end)
+            
+            setreadonly(mt, true)
         end)
-        
-        setreadonly(mt, true)
     end
     
     -- Hook untuk NameDisplay (jika ada)
     local function hookNameDisplay()
-        for _, gui in ipairs(PlayerGui:GetDescendants()) do
-            if gui:IsA("TextLabel") or gui:IsA("TextButton") then
-                if string.find(gui.Text, originalDisplayName) then
-                    gui.Text = string.gsub(gui.Text, originalDisplayName, customDisplayName)
+        pcall(function()
+            for _, gui in ipairs(PlayerGui:GetDescendants()) do
+                if gui:IsA("TextLabel") or gui:IsA("TextButton") then
+                    if string.find(gui.Text, originalDisplayName) then
+                        gui.Text = string.gsub(gui.Text, originalDisplayName, customDisplayName)
+                    end
                 end
             end
-        end
+        end)
     end
     
     -- Hook untuk leaderboard/player list
     local function hookLeaderboard()
-        for _, playerFrame in ipairs(PlayerGui:GetDescendants()) do
-            if playerFrame:IsA("Frame") and playerFrame:FindFirstChild("NameLabel") then
-                local nameLabel = playerFrame.NameLabel
-                if nameLabel:IsA("TextLabel") and nameLabel.Text == originalDisplayName then
-                    nameLabel.Text = customDisplayName
+        pcall(function()
+            for _, playerFrame in ipairs(PlayerGui:GetDescendants()) do
+                if playerFrame:IsA("Frame") and playerFrame:FindFirstChild("NameLabel") then
+                    local nameLabel = playerFrame.NameLabel
+                    if nameLabel:IsA("TextLabel") and nameLabel.Text == originalDisplayName then
+                        nameLabel.Text = customDisplayName
+                    end
                 end
             end
-        end
+        end)
     end
     
     pcall(overrideDisplayName)
@@ -230,7 +223,7 @@ end
 local function ToggleDisplayName(state)
     if state then
         if customDisplayName == "" then
-            Notify({
+            WindUI:Notify({
                 Title = "Display Name Error",
                 Content = "Please set a custom name first",
                 Duration = 3
@@ -241,7 +234,7 @@ local function ToggleDisplayName(state)
         displayNameEnabled = true
         OverrideDisplayNameVisual()
         
-        Notify({
+        WindUI:Notify({
             Title = "Display Name",
             Content = "Display name changed to: " .. customDisplayName,
             Duration = 3
@@ -251,7 +244,7 @@ local function ToggleDisplayName(state)
         displayNameEnabled = false
         RestoreDisplayName()
         
-        Notify({
+        WindUI:Notify({
             Title = "Display Name",
             Content = "Display name restored to original",
             Duration = 3
@@ -360,7 +353,7 @@ local function CleanupAllSystems()
 end
 
 local function UnloadUI()
-    Notify({
+    WindUI:Notify({
         Title = "UI System", 
         Content = "Unloading Anggazyy Hub...",
         Duration = 2
@@ -395,11 +388,11 @@ local function UnloadUI()
         getgenv().WindUI = nil
     end)
     
-    Notify({Title = "UI System", Content = "Anggazyy Hub unloaded successfully", Duration = 2})
+    WindUI:Notify({Title = "UI System", Content = "Anggazyy Hub unloaded successfully", Duration = 2})
 end
 
 local function ReloadUI()
-    Notify({
+    WindUI:Notify({
         Title = "UI System", 
         Content = "Reloading UI...",
         Duration = 2
@@ -417,7 +410,7 @@ local function ReloadUI()
     end)
     
     if not success then
-        Notify({
+        WindUI:Notify({
             Title = "Reload Error",
             Content = "Failed to reload UI. Please execute script manually.",
             Duration = 4
@@ -430,7 +423,7 @@ end
 -- =============================================================================
 local antiAFKEnabled = false
 
-function AntiKickReconnect()
+local function AntiKickReconnect()
     if getgenv().AntiKick_Started then return end
     getgenv().AntiKick_Started = true
 
@@ -463,14 +456,14 @@ local function ToggleAntiAFK(state)
     if state then
         antiAFKEnabled = true
         AntiKickReconnect()
-        Notify({
+        WindUI:Notify({
             Title = "Anti AFK System", 
             Content = "Anti Kick + Auto Reconnect activated",
             Duration = 3
         })
     else
         antiAFKEnabled = false
-        Notify({
+        WindUI:Notify({
             Title = "Anti AFK System", 
             Content = "Basic protection remains active for safety",
             Duration = 3
@@ -497,18 +490,6 @@ task.spawn(function()
         end)
     end
 end)
-
--- Notification System
-local function Notify(opts)
-    pcall(function()
-        WindUI:Notify({
-            Title = opts.Title or "Notification",
-            Content = opts.Content or "",
-            Duration = opts.Duration or 3,
-            Icon = opts.Icon or "info"
-        })
-    end
-end
 
 -- =============================================================================
 -- BLATANT FISHING SYSTEM
@@ -556,10 +537,10 @@ local function InitializeBlatantFishing()
     end)
     
     if success then
-        Notify({Title = "Blatant Fishing", Content = "System initialized successfully", Duration = 3})
+        WindUI:Notify({Title = "Blatant Fishing", Content = "System initialized successfully", Duration = 3})
         return true
     else
-        Notify({Title = "Blatant Fishing Error", Content = "Failed to initialize: " .. tostring(result), Duration = 4})
+        WindUI:Notify({Title = "Blatant Fishing Error", Content = "Failed to initialize: " .. tostring(result), Duration = 4})
         return false
     end
 end
@@ -655,7 +636,7 @@ end
 local function SetBlatantReelDelay(delay)
     if type(delay) == "number" and delay >= 0 and delay <= 1.87 then
         blatantReelDelay = delay
-        Notify({
+        WindUI:Notify({
             Title = "Blatant Fishing", 
             Content = string.format("Reel delay set to %.4f seconds", delay),
             Duration = 3
@@ -668,7 +649,7 @@ end
 local function SetBlatantFishingDelay(delay)
     if type(delay) == "number" and delay >= 0 and delay <= 5 then
         blatantFishingDelay = delay
-        Notify({
+        WindUI:Notify({
             Title = "Blatant Fishing", 
             Content = string.format("Fishing delay (loop) set to %.4f seconds", delay),
             Duration = 3
@@ -724,7 +705,7 @@ local function ToggleBlatantMode(enable)
             BLATANT_MODE_TROVE:Add(task.spawn(BlatantFishingLoop))
         end
         
-        Notify({Title = "⚡ Blatant Fishing", Content = "Fast fishing mode activated", Duration = 3})
+        WindUI:Notify({Title = "⚡ Blatant Fishing", Content = "Fast fishing mode activated", Duration = 3})
         
     else
         isBlatantActive = false
@@ -745,7 +726,7 @@ local function ToggleBlatantMode(enable)
             end
         end
         
-        Notify({Title = "Blatant Fishing", Content = "Fast fishing mode deactivated", Duration = 3})
+        WindUI:Notify({Title = "Blatant Fishing", Content = "Fast fishing mode deactivated", Duration = 3})
     end
     
     return true
@@ -753,16 +734,16 @@ end
 
 local function ManualBlatantFish()
     if not isBlatantActive then
-        Notify({Title = "Blatant Fishing", Content = "Please enable Blatant Mode first", Duration = 3})
+        WindUI:Notify({Title = "Blatant Fishing", Content = "Please enable Blatant Mode first", Duration = 3})
         return
     end
     
     pcall(function()
         local success = BlatantCastFishingRod()
         if success then
-            Notify({Title = "⚡ Manual Cast", Content = "Casting fishing rod instantly...", Duration = 2})
+            WindUI:Notify({Title = "⚡ Manual Cast", Content = "Casting fishing rod instantly...", Duration = 2})
         else
-            Notify({Title = "❌ Manual Cast Failed", Content = "Failed to cast fishing rod", Duration = 2})
+            WindUI:Notify({Title = "❌ Manual Cast Failed", Content = "Failed to cast fishing rod", Duration = 2})
         end
     end)
 end
@@ -818,7 +799,7 @@ end
 
 local function BuySelectedWeathers()
     if not next(selectedWeathers) then
-        Notify({
+        WindUI:Notify({
             Title = "Weather Purchase",
             Content = "No weathers selected!",
             Duration = 3
@@ -829,7 +810,7 @@ local function BuySelectedWeathers()
     local totalPurchases = 0
     local successfulPurchases = 0
     
-    Notify({
+    WindUI:Notify({
         Title = "Weather Purchase",
         Content = "Processing purchases...",
         Duration = 2
@@ -860,7 +841,7 @@ local function BuySelectedWeathers()
     
     selectedWeathers = {}
     
-    Notify({
+    WindUI:Notify({
         Title = "Purchase Complete",
         Content = string.format("Successfully purchased %d/%d weathers", successfulPurchases, totalPurchases),
         Duration = 4
@@ -964,7 +945,7 @@ local function ManualKnockAllDoors()
     local doors = FindTrickOrTreatDoors()
     
     if #doors == 0 then
-        Notify({
+        WindUI:Notify({
             Title = "🎃 Trick or Treat",
             Content = "No Trick or Treat doors found!",
             Duration = 3
@@ -982,7 +963,7 @@ local function ManualKnockAllDoors()
         task.wait(0.5)
     end
     
-    Notify({
+    WindUI:Notify({
         Title = "🎃 Knock Complete",
         Content = string.format("Success: %d/%d doors", successfulKnocks, #doors),
         Duration = 4
@@ -1123,7 +1104,7 @@ local function EnableAntiLag()
         settings().Rendering.QualityLevel = 1
     end)
     
-    Notify({Title = "Ultra Anti Lag", Content = "White texture mode enabled", Duration = 3})
+    WindUI:Notify({Title = "Ultra Anti Lag", Content = "White texture mode enabled", Duration = 3})
 end
 
 local function DisableAntiLag()
@@ -1172,7 +1153,7 @@ local function DisableAntiLag()
         settings().Rendering.QualityLevel = 10
     end)
     
-    Notify({Title = "Anti Lag", Content = "Graphics settings restored", Duration = 3})
+    WindUI:Notify({Title = "Anti Lag", Content = "Graphics settings restored", Duration = 3})
 end
 
 -- =============================================================================
@@ -1362,7 +1343,7 @@ local function ManualSellAllFish()
     end)
     
     if success then
-        Notify({Title = "Manual Sell", Content = result, Duration = 3})
+        WindUI:Notify({Title = "Manual Sell", Content = result, Duration = 3})
     end
 end
 
@@ -1694,7 +1675,7 @@ WeatherTab:Button({
     Justify = "Center",
     Callback = function()
         local newOptions, newWeathers = RefreshWeatherList()
-        Notify({
+        WindUI:Notify({
             Title = "Weather List Updated",
             Content = string.format("Loaded %d available weathers", #newWeathers),
             Duration = 3
@@ -1739,7 +1720,7 @@ BypassTab:Button({
     Callback = function()
         local success, message = ToggleFishingRadar()
         if success then
-            Notify({Title = "Fishing Radar", Content = message, Duration = 3})
+            WindUI:Notify({Title = "Fishing Radar", Content = message, Duration = 3})
         end
     end
 })
@@ -1772,7 +1753,7 @@ BypassTab:Button({
     Callback = function()
         local success, message = ToggleDivingGear()
         if success then
-            Notify({Title = "Diving Gear", Content = message, Duration = 3})
+            WindUI:Notify({Title = "Diving Gear", Content = message, Duration = 3})
         end
     end
 })
@@ -1869,7 +1850,7 @@ BypassTab:Button({
         StartDivingGear()
         StartAutoSell()
         StartAutoTrickTreat()
-        Notify({Title = "Bypass", Content = "All bypass features enabled", Duration = 3})
+        WindUI:Notify({Title = "Bypass", Content = "All bypass features enabled", Duration = 3})
     end
 })
 
@@ -1883,7 +1864,7 @@ BypassTab:Button({
         StopDivingGear()
         StopAutoSell()
         StopAutoTrickTreat()
-        Notify({Title = "Bypass", Content = "All bypass features disabled", Duration = 3})
+        WindUI:Notify({Title = "Bypass", Content = "All bypass features disabled", Duration = 3})
     end
 })
 
@@ -1950,13 +1931,13 @@ PlayerConfigTab:Input({
     Callback = function(text)
         local success, message = SetCustomDisplayName(text)
         if success then
-            Notify({
+            WindUI:Notify({
                 Title = "Display Name",
                 Content = message,
                 Duration = 3
             })
         else
-            Notify({
+            WindUI:Notify({
                 Title = "Display Name Error",
                 Content = message,
                 Duration = 4
@@ -1981,7 +1962,7 @@ PlayerConfigTab:Button({
     Callback = function()
         ToggleDisplayName(false)
         customDisplayName = ""
-        Notify({
+        WindUI:Notify({
             Title = "Display Name",
             Content = "Display name reset to original",
             Duration = 3
@@ -2003,7 +1984,7 @@ PlayerConfigTab:Button({
     Icon = "bookmark",
     Callback = function()
         if SaveCurrentPosition() then
-            Notify({Title = "Position Saved", Content = "Position saved successfully", Duration = 2})
+            WindUI:Notify({Title = "Position Saved", Content = "Position saved successfully", Duration = 2})
         end
     end
 })
@@ -2013,9 +1994,9 @@ PlayerConfigTab:Button({
     Icon = "navigation",
     Callback = function()
         if LoadSavedPosition() then
-            Notify({Title = "Position Loaded", Content = "Teleported to saved position", Duration = 2})
+            WindUI:Notify({Title = "Position Loaded", Content = "Teleported to saved position", Duration = 2})
         else
-            Notify({Title = "Load Failed", Content = "No position saved", Duration = 2})
+            WindUI:Notify({Title = "Load Failed", Content = "No position saved", Duration = 2})
         end
     end
 })
@@ -2028,10 +2009,10 @@ PlayerConfigTab:Toggle({
     Callback = function(state)
         if state then
             StartLockPosition()
-            Notify({Title = "Position Lock", Content = "Player position locked", Duration = 2})
+            WindUI:Notify({Title = "Position Lock", Content = "Player position locked", Duration = 2})
         else
             StopLockPosition()
-            Notify({Title = "Position Lock", Content = "Player position unlocked", Duration = 2})
+            WindUI:Notify({Title = "Position Lock", Content = "Player position unlocked", Duration = 2})
         end
     end
 })
@@ -2086,7 +2067,7 @@ PlayerConfigTab:Button({
         if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid") then
             LocalPlayer.Character.Humanoid.WalkSpeed = 16
             LocalPlayer.Character.Humanoid.JumpPower = 50
-            Notify({Title = "Reset", Content = "Movement reset to default", Duration = 2})
+            WindUI:Notify({Title = "Reset", Content = "Movement reset to default", Duration = 2})
         end
     end
 })
@@ -2108,7 +2089,7 @@ PlayerConfigTab:Button({
     Callback = function()
         EnableAntiLag()
         ToggleAntiAFK(true)
-        Notify({Title = "Performance", Content = "Maximum performance enabled", Duration = 2})
+        WindUI:Notify({Title = "Performance", Content = "Maximum performance enabled", Duration = 2})
     end
 })
 
@@ -2179,13 +2160,13 @@ TeleportTab:Button({
         
         if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
             LocalPlayer.Character.HumanoidRootPart.CFrame = CFrame.new(targetPosition)
-            Notify({
+            WindUI:Notify({
                 Title = "Teleport Success", 
                 Content = string.format("Teleported to %s", currentSelectedMap),
                 Duration = 3
             })
         else
-            Notify({
+            WindUI:Notify({
                 Title = "Teleport Failed",
                 Content = "Character not found",
                 Duration = 3
@@ -2252,7 +2233,7 @@ SettingsTab:Button({
                 end
             end)
         end
-        Notify({Title = "Clean", Content = "UI cleaned", Duration = 2})
+        WindUI:Notify({Title = "Clean", Content = "UI cleaned", Duration = 2})
     end
 })
 
@@ -2285,12 +2266,10 @@ SettingsTab:Label({
 })
 
 -- Initial Notification
-Notify({
+WindUI:Notify({
     Title = "Anggazyy Hub Ready", 
     Content = "WindUI System initialized successfully with FIXED Display Name & UI Systems",
     Duration = 4
 })
 
---//////////////////////////////////////////////////////////////////////////////////
--- WindUI System Initialization Complete
---//////////////////////////////////////////////////////////////////////////////////
+print("Anggazyy Hub v2.0 Loaded Successfully!")
