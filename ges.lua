@@ -114,7 +114,7 @@ local WindUI = loadstring(game:HttpGet("https://raw.githubusercontent.com/Footag
 task.spawn(function()
     task.wait(1) -- Tunggu sebentar agar UI siap
     WindUI:Popup({
-        Title = "XKXKXKKXKXLS?!",
+        Title = "Welcome to Anggazyy Hub!",
         Icon = "fish",
         Content = "Thank you for using Anggazyy Hub - Fish It Automation\n\nScript ini 100% Gratis dan tidak diperjualbelikan",
         Buttons = {
@@ -130,204 +130,233 @@ task.spawn(function()
 end)
 
 -- =============================================================================
--- MERCHANT SYSTEM MODULE - DITAMBAHKAN FITUR BARU
+-- MERCHANT SYSTEM MODULE - DIPERBAIKI DENGAN ERROR HANDLING
 -- =============================================================================
 local MerchantLite = {}
 
 function MerchantLite.Initialize()
-	local success, result = pcall(function()
-		local ReplicatedStorage = game:GetService("ReplicatedStorage")
-		local Players = game:GetService("Players")
-		
-		-- Load required modules
-		local Replion = require(ReplicatedStorage.Packages.Replion)
-		local ItemUtility = require(ReplicatedStorage.Shared.ItemUtility)
-		local TierUtility = require(ReplicatedStorage.Shared.TierUtility)
-		local CurrencyUtility = require(ReplicatedStorage.Modules.CurrencyUtility)
-		local MarketItemData = require(ReplicatedStorage.Shared.MarketItemData)
-		local InventoryMapping = require(ReplicatedStorage.Shared.InventoryMapping)
-		local PlayerStatsUtility = require(ReplicatedStorage.Shared.PlayerStatsUtility)
-		local Net = require(ReplicatedStorage.Packages.Net)
-		local TextNotificationController = require(ReplicatedStorage.Client.TextNotificationController)
+    local success, result = pcall(function()
+        local ReplicatedStorage = game:GetService("ReplicatedStorage")
+        local Players = game:GetService("Players")
+        
+        -- Load required modules dengan error handling
+        local Replion = require(ReplicatedStorage.Packages.Replion)
+        local ItemUtility = require(ReplicatedStorage.Shared.ItemUtility)
+        local TierUtility = require(ReplicatedStorage.Shared.TierUtility)
+        local CurrencyUtility = require(ReplicatedStorage.Modules.CurrencyUtility)
+        local MarketItemData = require(ReplicatedStorage.Shared.MarketItemData)
+        local InventoryMapping = require(ReplicatedStorage.Shared.InventoryMapping)
+        local PlayerStatsUtility = require(ReplicatedStorage.Shared.PlayerStatsUtility)
+        local Net = require(ReplicatedStorage.Packages.Net)
+        
+        -- Cari TextNotificationController dengan path yang benar
+        local TextNotificationController
+        local success, controller = pcall(function()
+            return require(ReplicatedStorage.Controllers.TextNotificationController)
+        end)
+        if not success then
+            success, controller = pcall(function()
+                return require(ReplicatedStorage.Client.TextNotificationController)
+            end)
+        end
+        TextNotificationController = controller
 
-		-- Remote untuk pembelian
-		local PurchaseRemote = Net:RemoteFunction("PurchaseMarketItem")
+        -- Remote untuk pembelian
+        local PurchaseRemote = Net:RemoteFunction("PurchaseMarketItem")
 
-		-- Variabel utama
-		local LocalPlayer = Players.LocalPlayer
-		local MerchantData = Replion.Client:WaitReplion("Merchant")
-		local PlayerData = Replion.Client:WaitReplion("Data")
+        -- Variabel utama
+        local LocalPlayer = Players.LocalPlayer
+        local MerchantData = Replion.Client:WaitReplion("Merchant")
+        local PlayerData = Replion.Client:WaitReplion("Data")
 
-		------------------------------------------------------------
-		-- Fungsi ambil data item dari MarketItemData
-		------------------------------------------------------------
-		function MerchantLite.GetMarketDataFromId(id)
-			for _, v in pairs(MarketItemData) do
-				if v.Id == id then
-					return v
-				end
-			end
-			return nil
-		end
+        ------------------------------------------------------------
+        -- Fungsi ambil data item dari MarketItemData
+        ------------------------------------------------------------
+        function MerchantLite.GetMarketDataFromId(id)
+            for _, v in pairs(MarketItemData) do
+                if v.Id == id then
+                    return v
+                end
+            end
+            return nil
+        end
 
-		------------------------------------------------------------
-		-- Fungsi untuk cek apakah player sudah punya item
-		------------------------------------------------------------
-		function MerchantLite.OwnsLocalItem(data)
-			if not data.Type or not data.Identifier then
-				return false
-			end
+        ------------------------------------------------------------
+        -- Fungsi untuk cek apakah player sudah punya item
+        ------------------------------------------------------------
+        function MerchantLite.OwnsLocalItem(data)
+            if not data.Type or not data.Identifier then
+                return false
+            end
 
-			local itemInfo = ItemUtility.GetItemDataFromItemType(data.Type, data.Identifier)
-			if not itemInfo then
-				return false
-			end
+            local itemInfo = ItemUtility.GetItemDataFromItemType(data.Type, data.Identifier)
+            if not itemInfo then
+                return false
+            end
 
-			local found = PlayerStatsUtility:GetItemFromInventory(PlayerData, function(item)
-				return item.Id == itemInfo.Data.Id
-			end, InventoryMapping[data.Type or "Items"])
+            local found = PlayerStatsUtility:GetItemFromInventory(PlayerData, function(item)
+                return item.Id == itemInfo.Data.Id
+            end, InventoryMapping[data.Type or "Items"])
 
-			return found ~= nil
-		end
+            return found ~= nil
+        end
 
-		------------------------------------------------------------
-		-- Fungsi untuk menampilkan daftar item coin-only (bukan crate)
-		------------------------------------------------------------
-		function MerchantLite.ListCoinItems()
-			local items = {}
-			local merchantItems = MerchantData:GetExpect("items") or MerchantData:GetExpect("Items") or {}
+        ------------------------------------------------------------
+        -- Fungsi untuk menampilkan daftar item coin-only (bukan crate)
+        ------------------------------------------------------------
+        function MerchantLite.ListCoinItems()
+            local items = {}
+            local merchantItemsData = MerchantData:Get("Items") or MerchantData:Get("items") or {}
 
-			for _, v in ipairs(merchantItems) do
-				local itemId = v.Id or v.id or v.ItemId
-				local data = MerchantLite.GetMarketDataFromId(itemId)
+            for _, v in ipairs(merchantItemsData) do
+                local itemId = v.Id or v.id or v.ItemId
+                local data = MerchantLite.GetMarketDataFromId(itemId)
 
-				if data and not data.SkinCrate and data.Currency == "Coins" then
-					local owned = MerchantLite.OwnsLocalItem(data)
-					local itemInfo = {
-						Name = data.Name or "Unknown",
-						Id = data.Id,
-						Price = data.Price or data.Cost or 0,
-						Currency = data.Currency,
-						Owned = owned,
-						DisplayName = ("%s - %s Coins [%s]"):format(data.Name or "Unknown", data.Price or 0, owned and "Owned" or "Not Owned")
-					}
-					table.insert(items, itemInfo)
-				end
-			end
+                if data and not data.SkinCrate and data.Currency == "Coins" then
+                    local owned = MerchantLite.OwnsLocalItem(data)
+                    local itemInfo = {
+                        Name = data.Name or "Unknown",
+                        Id = data.Id,
+                        Price = data.Price or data.Cost or 0,
+                        Currency = data.Currency,
+                        Owned = owned,
+                        DisplayName = ("%s - %s Coins [%s]"):format(data.Name or "Unknown", data.Price or 0, owned and "OWNED" or "AVAILABLE")
+                    }
+                    table.insert(items, itemInfo)
+                end
+            end
 
-			table.sort(items, function(a, b)
-				return a.Price < b.Price
-			end)
+            table.sort(items, function(a, b)
+                return a.Price < b.Price
+            end)
 
-			return items
-		end
+            return items
+        end
 
-		------------------------------------------------------------
-		-- Fungsi pembelian item coin-only
-		------------------------------------------------------------
-		function MerchantLite.BuyItem(itemId)
-			local item = MerchantLite.GetMarketDataFromId(itemId)
-			if not item then
-				warn("❌ Item not found for ID:", itemId)
-				return false, "Item not found"
-			end
+        ------------------------------------------------------------
+        -- Fungsi pembelian item coin-only
+        ------------------------------------------------------------
+        function MerchantLite.BuyItem(itemId)
+            local item = MerchantLite.GetMarketDataFromId(itemId)
+            if not item then
+                warn("❌ Item not found for ID:", itemId)
+                return false, "Item not found"
+            end
 
-			if item.SkinCrate or item.Currency ~= "Coins" then
-				warn("⏩ Skipped non-coin item:", itemId)
-				return false, "Non-coin items not supported"
-			end
+            if item.SkinCrate or item.Currency ~= "Coins" then
+                warn("⏩ Skipped non-coin item:", itemId)
+                return false, "Non-coin items not supported"
+            end
 
-			local currency = CurrencyUtility:GetCurrency(item.Currency)
-			if not currency then
-				warn("❌ Invalid currency for:", itemId)
-				return false, "Invalid currency"
-			end
+            local currency = CurrencyUtility:GetCurrency(item.Currency)
+            if not currency then
+                warn("❌ Invalid currency for:", itemId)
+                return false, "Invalid currency"
+            end
 
-			local playerCoins = PlayerData:Get(currency.Path) or 0
-			if playerCoins < (item.Price or item.Cost or 0) then
-				TextNotificationController:DeliverNotification({
-					Type = "Text",
-					Text = "You don't have enough coins!",
-					TextColor = { R = 255, G = 0, B = 0 },
-				})
-				return false, "Not enough coins"
-			end
+            local playerCoins = PlayerData:Get(currency.Path) or 0
+            if playerCoins < (item.Price or item.Cost or 0) then
+                if TextNotificationController then
+                    TextNotificationController:DeliverNotification({
+                        Type = "Text",
+                        Text = "You don't have enough coins!",
+                        TextColor = { R = 255, G = 0, B = 0 },
+                    })
+                end
+                return false, "Not enough coins"
+            end
 
-			local success = PurchaseRemote:InvokeServer(item.Id)
-			if success then
-				TextNotificationController:DeliverNotification({
-					Type = "Text",
-					Text = ("Purchased %s successfully!"):format(item.Name),
-					TextColor = { R = 0, G = 255, B = 0 },
-				})
-				return true, "Purchase successful"
-			else
-				TextNotificationController:DeliverNotification({
-					Type = "Text",
-					Text = ("Purchase failed for %s."):format(item.Name),
-					TextColor = { R = 255, G = 0, B = 0 },
-				})
-				return false, "Purchase failed"
-			end
-		end
+            local success = PurchaseRemote:InvokeServer(item.Id)
+            if success then
+                if TextNotificationController then
+                    TextNotificationController:DeliverNotification({
+                        Type = "Text",
+                        Text = ("Purchased %s successfully!"):format(item.Name),
+                        TextColor = { R = 0, G = 255, B = 0 },
+                    })
+                end
+                return true, "Purchase successful"
+            else
+                if TextNotificationController then
+                    TextNotificationController:DeliverNotification({
+                        Type = "Text",
+                        Text = ("Purchase failed for %s."):format(item.Name),
+                        TextColor = { R = 255, G = 0, B = 0 },
+                    })
+                end
+                return false, "Purchase failed"
+            end
+        end
 
-		-- Load awal
-		merchantItems = MerchantLite.ListCoinItems()
-		return true
-	end)
+        -- Load awal
+        merchantItems = MerchantLite.ListCoinItems()
+        return true
+    end)
 
-	if success then
-		print("✅ Merchant system initialized successfully")
-		return true
-	else
-		warn("❌ Failed to initialize merchant:", result)
-		return false
-	end
+    if success then
+        print("✅ Merchant system initialized successfully")
+        Notify({
+            Title = "Merchant System",
+            Content = "Merchant system loaded successfully!",
+            Duration = 3
+        })
+        return true
+    else
+        warn("❌ Failed to initialize merchant:", result)
+        Notify({
+            Title = "Merchant Error",
+            Content = "Failed to load merchant system: " .. tostring(result),
+            Duration = 4
+        })
+        return false
+    end
 end
 
 ------------------------------------------------------------
--- Fungsi tambahan
+-- Fungsi tambahan merchant
 ------------------------------------------------------------
 function MerchantLite.RefreshItems()
-	local success, result = pcall(function()
-		merchantItems = MerchantLite.ListCoinItems()
-		return merchantItems
-	end)
-	if success then
-		return merchantItems
-	else
-		warn("Failed to refresh merchant items:", result)
-		return {}
-	end
+    local success, result = pcall(function()
+        merchantItems = MerchantLite.ListCoinItems()
+        return merchantItems
+    end)
+    if success then
+        return merchantItems
+    else
+        warn("Failed to refresh merchant items:", result)
+        return {}
+    end
 end
 
 function MerchantLite.GetItemDisplayNames()
-	local names = {}
-	for _, item in ipairs(merchantItems or {}) do
-		table.insert(names, item.DisplayName)
-	end
-	return names
+    local names = {}
+    for _, item in ipairs(merchantItems or {}) do
+        table.insert(names, item.DisplayName)
+    end
+    if #names == 0 then
+        table.insert(names, "No items available - Refresh first")
+    end
+    return names
 end
 
 function MerchantLite.BuyItemByDisplayName(displayName)
-	for _, item in ipairs(merchantItems or {}) do
-		if item.DisplayName == displayName then
-			return MerchantLite.BuyItem(item.Id)
-		end
-	end
-	return false, "Item not found"
+    for _, item in ipairs(merchantItems or {}) do
+        if item.DisplayName == displayName then
+            return MerchantLite.BuyItem(item.Id)
+        end
+    end
+    return false, "Item not found"
 end
 
 function MerchantLite.GetItemByDisplayName(displayName)
-	for _, item in ipairs(merchantItems or {}) do
-		if item.DisplayName == displayName then
-			return item
-		end
-	end
-	return nil
+    for _, item in ipairs(merchantItems or {}) do
+        if item.DisplayName == displayName then
+            return item
+        end
+    end
+    return nil
 end
 
-return MerchantLite
 -- =============================================================================
 -- ANTI AFK SYSTEM - Taruh di bagian Player Config
 -- =============================================================================
@@ -342,6 +371,7 @@ function AntiKickReconnect()
     -- 🔹 Cegah AFK Kick
     LocalPlayer.Idled:Connect(function()
         task.wait(1)
+        local VirtualUser = game:GetService("VirtualUser")
         VirtualUser:CaptureController()
         VirtualUser:ClickButton2(Vector2.new())
         print("[SYSTEM] Anti-AFK aktif, mengirim aktivitas virtual ✅")
@@ -402,6 +432,18 @@ local function ToggleAntiAFK(state)
     end
 end
 
+-- Notification System
+local function Notify(opts)
+    pcall(function()
+        WindUI:Notify({
+            Title = opts.Title or "Notification",
+            Content = opts.Content or "",
+            Duration = opts.Duration or 3,
+            Icon = opts.Icon or "info"
+        })
+    end)
+end
+
 -- Auto-clean money icons
 task.spawn(function()
     while task.wait(1) do
@@ -423,20 +465,8 @@ task.spawn(function()
     end
 end)
 
--- Notification System
-local function Notify(opts)
-    pcall(function()
-        WindUI:Notify({
-            Title = opts.Title or "Notification",
-            Content = opts.Content or "",
-            Duration = opts.Duration or 3,
-            Icon = opts.Icon or "info"
-        })
-    end)
-end
-
 -- =============================================================================
--- BLATANT FISHING SYSTEM - UPDATED WORKING VERSION
+-- BLATANT FISHING SYSTEM - DIPERBAIKI
 -- =============================================================================
 
 local function InitializeBlatantFishing()
@@ -550,75 +580,18 @@ local function BlatantCastMethod1()
         _G.confirmFishingInput = function() return true end
         
         local mousePos = GetSafeMousePosition()
-        local skipCharge = true
         
-        -- Panggil RequestChargeFishingRod dengan parameter skip charge
+        -- Panggil RequestChargeFishingRod dengan parameter
         local castResult = module_upvr:RequestChargeFishingRod(mousePos, nil)
         
         _G.confirmFishingInput = nil
         return castResult
     end)
     
-    return success and result -- return success DAN result
-end
-
--- Approach 2: Direct server call
-local function BlatantCastMethod2()
-    if not RequestFishingMinigameStarted_Net then
-        return false
-    end
-    
-    local success, result = pcall(function()
-        -- Get character position
-        local character = LocalPlayer.Character
-        if not character or not character:FindFirstChild("HumanoidRootPart") then
-            return false, "No character found"
-        end
-        
-        local throwPosition = character.HumanoidRootPart.Position + Vector3.new(0, -1, 10)
-        local power = 0.5
-        local castTime = workspace:GetServerTimeNow()
-        
-        local serverSuccess, serverResult = RequestFishingMinigameStarted_Net:InvokeServer(
-            throwPosition.Y,
-            power, 
-            castTime
-        )
-        
-        if serverSuccess then
-            -- Trigger FishingRodStarted manually
-            if module_upvr and module_upvr.FishingRodStarted then
-                module_upvr:FishingRodStarted(serverResult)
-            end
-            return true
-        else
-            return false, tostring(serverResult)
-        end
-    end)
-    
     return success
 end
 
--- Approach 3: Menggunakan SendFishingRequestToServer langsung
-local function BlatantCastMethod3()
-    if not module_upvr or not module_upvr.SendFishingRequestToServer then
-        return false
-    end
-    
-    local success, result = pcall(function()
-        local mousePos = GetSafeMousePosition()
-        local power = 0.5
-        local skipCharge = true
-        
-        local sendSuccess, sendResult = module_upvr:SendFishingRequestToServer(mousePos, power, skipCharge)
-        return sendSuccess
-    end)
-    
-    return success
-end
-
--- Main blatant casting function yang mencoba method 1 dan 3
--- Main blatant casting function yang hanya menggunakan method 1
+-- Main blatant casting function
 local function BlatantCastFishingRod()
     -- Coba method 1: RequestChargeFishingRod dengan bypass
     local success = BlatantCastMethod1()
@@ -631,10 +604,7 @@ local function BlatantCastFishingRod()
     return false
 end
 
--- =============================================================================
--- PERBAIKAN UTAMA: BlatantFishingLoop yang menggunakan multiple approaches
--- =============================================================================
-
+-- Blatant Fishing Loop
 local function BlatantFishingLoop()
     while isBlatantActive do
         local castSuccess = BlatantCastFishingRod()
@@ -655,9 +625,8 @@ local function HookRequestChargeFishingRod(arg1, arg2, arg3)
         
         -- Di Blatant Mode, gunakan parameter untuk skip charging
         local mousePos = arg1 or GetSafeMousePosition()
-        local skipCharge = true
         
-        return originalRequestChargeFishingRod(mousePos, arg2, skipCharge)
+        return originalRequestChargeFishingRod(mousePos, arg2, arg3)
     else
         return originalRequestChargeFishingRod(arg1, arg2, arg3)
     end
@@ -838,6 +807,32 @@ local function SafeInvokeAutoFishing(state)
             pcall(function() rfObj:InvokeServer(state) end)
             return
         end
+    end)
+end
+
+-- Auto Fishing System
+local function StartAutoFish()
+    if autoFishEnabled then return end
+    autoFishEnabled = true
+    Notify({Title = "Auto Fishing", Content = "System activated successfully", Duration = 2})
+
+    autoFishLoopThread = task.spawn(function()
+        while autoFishEnabled do
+            pcall(function()
+                SafeInvokeAutoFishing(true)
+            end)
+            task.wait(4)
+        end
+    end)
+end
+
+local function StopAutoFish()
+    if not autoFishEnabled then return end
+    autoFishEnabled = false
+    Notify({Title = "Auto Fishing", Content = "System deactivated", Duration = 2})
+    
+    pcall(function()
+        SafeInvokeAutoFishing(false)
     end)
 end
 
@@ -1138,542 +1133,6 @@ local function ManualKnockAllDoors()
     })
 end
 
--- Auto Fishing System
-local function StartAutoFish()
-    if autoFishEnabled then return end
-    autoFishEnabled = true
-    Notify({Title = "Auto Fishing", Content = "System activated successfully", Duration = 2})
-
-    autoFishLoopThread = task.spawn(function()
-        while autoFishEnabled do
-            pcall(function()
-                SafeInvokeAutoFishing(true)
-            end)
-            task.wait(4)
-        end
-    end)
-end
-
-local function StopAutoFish()
-    if not autoFishEnabled then return end
-    autoFishEnabled = false
-    Notify({Title = "Auto Fishing", Content = "System deactivated", Duration = 2})
-    
-    pcall(function()
-        SafeInvokeAutoFishing(false)
-    end)
-end
-
--- =============================================================================
--- ULTRA ANTI LAG SYSTEM - WHITE TEXTURE MODE
--- =============================================================================
-
--- Save original graphics settings
-local function SaveOriginalGraphics()
-    originalGraphicsSettings = {
-        GraphicsQualityLevel = UserGameSettings.GraphicsQualityLevel,
-        SavedQualityLevel = UserGameSettings.SavedQualityLevel,
-        MasterVolume = Lighting.GlobalShadows,
-        Brightness = Lighting.Brightness,
-        FogEnd = Lighting.FogEnd,
-        ShadowSoftness = Lighting.ShadowSoftness,
-        EnvironmentDiffuseScale = Lighting.EnvironmentDiffuseScale,
-        EnvironmentSpecularScale = Lighting.EnvironmentSpecularScale
-    }
-end
-
--- Ultra Anti Lag System - White Texture Mode
-local function EnableAntiLag()
-    if antiLagEnabled then return end
-    
-    SaveOriginalGraphics()
-    antiLagEnabled = true
-    
-    -- Extreme graphics optimization with white textures
-    pcall(function()
-        -- Graphics quality settings
-        UserGameSettings.GraphicsQualityLevel = 1
-        UserGameSettings.SavedQualityLevel = Enum.SavedQualitySetting.QualityLevel1
-        
-        -- Lighting optimization - Bright white environment
-        Lighting.GlobalShadows = false
-        Lighting.FogEnd = 999999
-        Lighting.Brightness = 5  -- Extra bright
-        Lighting.ShadowSoftness = 0
-        Lighting.EnvironmentDiffuseScale = 1
-        Lighting.EnvironmentSpecularScale = 0
-        Lighting.OutdoorAmbient = Color3.new(1, 1, 1)  -- Pure white ambient
-        Lighting.Ambient = Color3.new(1, 1, 1)  -- Pure white
-        Lighting.ColorShift_Bottom = Color3.new(1, 1, 1)
-        Lighting.ColorShift_Top = Color3.new(1, 1, 1)
-        
-        -- Terrain optimization - White terrain
-        if workspace.Terrain then
-            workspace.Terrain.Decoration = false
-            workspace.Terrain.WaterReflectance = 0
-            workspace.Terrain.WaterTransparency = 1
-            workspace.Terrain.WaterWaveSize = 0
-            workspace.Terrain.WaterWaveSpeed = 0
-        end
-        
-        -- Make all parts white and disable effects
-        for _, obj in ipairs(workspace:GetDescendants()) do
-            if obj:IsA("Part") or obj:IsA("MeshPart") or obj:IsA("UnionOperation") then
-                -- Set all parts to white
-                if obj:FindFirstChildOfClass("Texture") then
-                    obj:FindFirstChildOfClass("Texture"):Destroy()
-                end
-                if obj:FindFirstChildOfClass("Decal") then
-                    obj:FindFirstChildOfClass("Decal"):Destroy()
-                end
-                obj.Material = Enum.Material.SmoothPlastic
-                obj.BrickColor = BrickColor.new("White")
-                obj.Reflectance = 0
-            elseif obj:IsA("ParticleEmitter") then
-                obj.Enabled = false
-            elseif obj:IsA("Fire") then
-                obj.Enabled = false
-            elseif obj:IsA("Smoke") then
-                obj.Enabled = false
-            elseif obj:IsA("Sparkles") then
-                obj.Enabled = false
-            elseif obj:IsA("Beam") then
-                obj.Enabled = false
-            elseif obj:IsA("Trail") then
-                obj.Enabled = false
-            elseif obj:IsA("Sound") and not obj:FindFirstAncestorWhichIsA("Player") then
-                obj:Stop()
-            end
-        end
-        
-        -- Reduce texture quality to minimum
-        settings().Rendering.QualityLevel = 1
-    end)
-    
-    Notify({Title = "Ultra Anti Lag", Content = "White texture mode enabled - Maximum performance", Duration = 3})
-end
-
-local function DisableAntiLag()
-    if not antiLagEnabled then return end
-    antiLagEnabled = false
-    
-    -- Restore original graphics settings
-    pcall(function()
-        if originalGraphicsSettings.GraphicsQualityLevel then
-            UserGameSettings.GraphicsQualityLevel = originalGraphicsSettings.GraphicsQualityLevel
-        end
-        if originalGraphicsSettings.SavedQualityLevel then
-            UserGameSettings.SavedQualityLevel = originalGraphicsSettings.SavedQualityLevel
-        end
-        if originalGraphicsSettings.MasterVolume ~= nil then
-            Lighting.GlobalShadows = originalGraphicsSettings.MasterVolume
-        end
-        if originalGraphicsSettings.Brightness then
-            Lighting.Brightness = originalGraphicsSettings.Brightness
-        end
-        if originalGraphicsSettings.FogEnd then
-            Lighting.FogEnd = originalGraphicsSettings.FogEnd
-        end
-        if originalGraphicsSettings.ShadowSoftness then
-            Lighting.ShadowSoftness = originalGraphicsSettings.ShadowSoftness
-        end
-        if originalGraphicsSettings.EnvironmentDiffuseScale then
-            Lighting.EnvironmentDiffuseScale = originalGraphicsSettings.EnvironmentDiffuseScale
-        end
-        if originalGraphicsSettings.EnvironmentSpecularScale then
-            Lighting.EnvironmentSpecularScale = originalGraphicsSettings.EnvironmentSpecularScale
-        end
-        
-        -- Restore terrain
-        if workspace.Terrain then
-            workspace.Terrain.Decoration = true
-            workspace.Terrain.WaterReflectance = 0.5
-            workspace.Terrain.WaterTransparency = 0.5
-            workspace.Terrain.WaterWaveSize = 0.5
-            workspace.Terrain.WaterWaveSpeed = 10
-        end
-        
-        -- Restore lighting
-        Lighting.OutdoorAmbient = Color3.new(0.5, 0.5, 0.5)
-        Lighting.Ambient = Color3.new(0.5, 0.5, 0.5)
-        Lighting.ColorShift_Bottom = Color3.new(0, 0, 0)
-        Lighting.ColorShift_Top = Color3.new(0, 0, 0)
-        
-        -- Restore texture quality
-        settings().Rendering.QualityLevel = 10
-    end)
-    
-    Notify({Title = "Anti Lag", Content = "Graphics settings restored", Duration = 3})
-end
-
--- Position Management System
-local function SaveCurrentPosition()
-    local character = LocalPlayer.Character
-    if character and character:FindFirstChild("HumanoidRootPart") then
-        lastSavedPosition = character.HumanoidRootPart.Position
-        Notify({
-            Title = "Position Saved", 
-            Content = string.format("Position saved successfully"),
-            Duration = 2
-        })
-        return true
-    end
-    return false
-end
-
-local function LoadSavedPosition()
-    if not lastSavedPosition then
-        Notify({Title = "Load Failed", Content = "No position saved", Duration = 2})
-        return false
-    end
-    
-    local character = LocalPlayer.Character
-    if character and character:FindFirstChild("HumanoidRootPart") then
-        character.HumanoidRootPart.CFrame = CFrame.new(lastSavedPosition)
-        Notify({Title = "Position Loaded", Content = "Teleported to saved position", Duration = 2})
-        return true
-    end
-    return false
-end
-
-local function StartLockPosition()
-    if lockPositionEnabled then return end
-    lockPositionEnabled = true
-    
-    local character = LocalPlayer.Character
-    if character and character:FindFirstChild("HumanoidRootPart") then
-        lastSavedPosition = character.HumanoidRootPart.Position
-    end
-    
-    lockPositionLoop = RunService.Heartbeat:Connect(function()
-        if not lockPositionEnabled then return end
-        
-        local character = LocalPlayer.Character
-        if character and character:FindFirstChild("HumanoidRootPart") and lastSavedPosition then
-            local currentPos = character.HumanoidRootPart.Position
-            local distance = (currentPos - lastSavedPosition).Magnitude
-            
-            if distance > 3 then
-                character.HumanoidRootPart.CFrame = CFrame.new(lastSavedPosition)
-            end
-        end
-    end)
-    
-    Notify({Title = "Position Lock", Content = "Player position locked", Duration = 2})
-end
-
-local function StopLockPosition()
-    if not lockPositionEnabled then return end
-    lockPositionEnabled = false
-    
-    if lockPositionLoop then
-        lockPositionLoop:Disconnect()
-        lockPositionLoop = nil
-    end
-    
-    Notify({Title = "Position Lock", Content = "Player position unlocked", Duration = 2})
-end
-
--- =============================================================================
--- BYPASS SYSTEM - FISHING RADAR, DIVING GEAR & AUTO SELL
--- =============================================================================
-
--- Fishing Radar System
-local function ToggleFishingRadar()
-    local success, result = pcall(function()
-        -- Load required modules
-        local Replion = require(ReplicatedStorage.Packages.Replion)
-        local Net = require(ReplicatedStorage.Packages.Net)
-        local UpdateFishingRadar = Net:RemoteFunction("UpdateFishingRadar")
-        
-        -- Get player data
-        local Data = Replion.Client:WaitReplion("Data")
-        if not Data then
-            return false, "Data Replion tidak ditemukan!"
-        end
-
-        -- Get current radar state
-        local currentState = Data:Get("RegionsVisible")
-        local desiredState = not currentState
-
-        -- Invoke server to update radar
-        local invokeSuccess = UpdateFishingRadar:InvokeServer(desiredState)
-        
-        if invokeSuccess then
-            fishingRadarEnabled = desiredState
-            return true, "Radar: " .. (desiredState and "ENABLED" or "DISABLED")
-        else
-            return false, "Failed to update radar"
-        end
-    end)
-    
-    if success then
-        return true, result
-    else
-        return false, "Error: " .. tostring(result)
-    end
-end
-
-local function StartFishingRadar()
-    if fishingRadarEnabled then return end
-    
-    local success, message = ToggleFishingRadar()
-    if success then
-        fishingRadarEnabled = true
-        Notify({Title = "Fishing Radar", Content = message, Duration = 3})
-    else
-        Notify({Title = "Radar Error", Content = message, Duration = 4})
-    end
-end
-
-local function StopFishingRadar()
-    if not fishingRadarEnabled then return end
-    
-    local success, message = ToggleFishingRadar()
-    if success then
-        fishingRadarEnabled = false
-        Notify({Title = "Fishing Radar", Content = message, Duration = 3})
-    else
-        Notify({Title = "Radar Error", Content = message, Duration = 4})
-    end
-end
-
--- Diving Gear System
-local function ToggleDivingGear()
-    local success, result = pcall(function()
-        -- Load required modules
-        local Net = require(ReplicatedStorage.Packages.Net)
-        local Replion = require(ReplicatedStorage.Packages.Replion)
-        local ItemUtility = require(ReplicatedStorage.Shared.ItemUtility)
-        
-        -- Get diving gear data
-        local DivingGear = ItemUtility.GetItemDataFromItemType("Gears", "Diving Gear")
-        if not DivingGear then
-            return false, "Diving Gear tidak ditemukan!"
-        end
-
-        -- Get player data
-        local Data = Replion.Client:WaitReplion("Data")
-        if not Data then
-            return false, "Data Replion tidak ditemukan!"
-        end
-
-        -- Get remote functions
-        local UnequipOxygenTank = Net:RemoteFunction("UnequipOxygenTank")
-        local EquipOxygenTank = Net:RemoteFunction("EquipOxygenTank")
-
-        -- Check current equipment state
-        local EquippedId = Data:Get("EquippedOxygenTankId")
-        local isEquipped = EquippedId == DivingGear.Data.Id
-        local success
-
-        -- Toggle equipment
-        if isEquipped then
-            success = UnequipOxygenTank:InvokeServer()
-        else
-            success = EquipOxygenTank:InvokeServer(DivingGear.Data.Id)
-        end
-
-        if success then
-            divingGearEnabled = not isEquipped
-            return true, "Diving Gear: " .. (not isEquipped and "ON" or "OFF")
-        else
-            return false, "Failed to toggle diving gear"
-        end
-    end)
-    
-    if success then
-        return true, result
-    else
-        return false, "Error: " .. tostring(result)
-    end
-end
-
-local function StartDivingGear()
-    if divingGearEnabled then return end
-    
-    local success, message = ToggleDivingGear()
-    if success then
-        divingGearEnabled = true
-        Notify({Title = "Diving Gear", Content = message, Duration = 3})
-    else
-        Notify({Title = "Diving Gear Error", Content = message, Duration = 4})
-    end
-end
-
-local function StopDivingGear()
-    if not divingGearEnabled then return end
-    
-    local success, message = ToggleDivingGear()
-    if success then
-        divingGearEnabled = false
-        Notify({Title = "Diving Gear", Content = message, Duration = 3})
-    else
-        Notify({Title = "Diving Gear Error", Content = message, Duration = 4})
-    end
-end
-
--- Auto Sell System
-local function ManualSellAllFish()
-    local success, result = pcall(function()
-        local VendorController = require(ReplicatedStorage.Controllers.VendorController)
-        if VendorController and VendorController.SellAllItems then
-            VendorController:SellAllItems()
-            return true, "All fish sold successfully!"
-        else
-            return false, "VendorController not found"
-        end
-    end)
-    
-    if success then
-        Notify({Title = "Manual Sell", Content = result, Duration = 3})
-    else
-        Notify({Title = "Sell Error", Content = result, Duration = 4})
-    end
-end
-
-local function StartAutoSell()
-    if autoSellEnabled then return end
-    autoSellEnabled = true
-    
-    autoSellLoop = task.spawn(function()
-        while autoSellEnabled do
-            pcall(function()
-                local Replion = require(ReplicatedStorage.Packages.Replion)
-                local Data = Replion.Client:WaitReplion("Data")
-                local VendorController = require(ReplicatedStorage.Controllers.VendorController)
-                
-                if Data and VendorController and VendorController.SellAllItems then
-                    local inventory = Data:Get("Inventory")
-                    if inventory and inventory.Fish then
-                        local fishCount = 0
-                        for _, fish in pairs(inventory.Fish) do
-                            fishCount = fishCount + (fish.Amount or 1)
-                        end
-                        
-                        if fishCount >= autoSellThreshold then
-                            VendorController:SellAllItems()
-                            Notify({
-                                Title = "Auto Sell", 
-                                Content = string.format("Sold %d fish automatically", fishCount),
-                                Duration = 2
-                            })
-                        end
-                    end
-                end
-            end)
-            task.wait(2) -- Check every 2 seconds
-        end
-    end)
-    
-    Notify({
-        Title = "Auto Sell Started", 
-        Content = string.format("Auto selling when fish count >= %d", autoSellThreshold),
-        Duration = 3
-    })
-end
-
-local function StopAutoSell()
-    if not autoSellEnabled then return end
-    autoSellEnabled = false
-    
-    if autoSellLoop then
-        task.cancel(autoSellLoop)
-        autoSellLoop = nil
-    end
-    
-    Notify({Title = "Auto Sell", Content = "Auto sell stopped", Duration = 2})
-end
-
-local function SetAutoSellThreshold(amount)
-    if type(amount) == "number" and amount > 0 then
-        autoSellThreshold = amount
-        Notify({
-            Title = "Auto Sell Threshold", 
-            Content = string.format("Threshold set to %d fish", amount),
-            Duration = 3
-        })
-        return true
-    end
-    return false
-end
-
--- Auto Radar Toggle with safety
-local function SafeToggleRadar()
-    local success, message = ToggleFishingRadar()
-    if success then
-        Notify({Title = "Fishing Radar", Content = message, Duration = 3})
-    else
-        Notify({Title = "Radar Error", Content = message, Duration = 4})
-    end
-end
-
--- Auto Diving Gear Toggle with safety
-local function SafeToggleDivingGear()
-    local success, message = ToggleDivingGear()
-    if success then
-        Notify({Title = "Diving Gear", Content = message, Duration = 3})
-    else
-        Notify({Title = "Diving Gear Error", Content = message, Duration = 4})
-    end
-end
-
--- Coordinate Display System
-local function CreateCoordinateDisplay()
-    if coordinateGui and coordinateGui.Parent then coordinateGui:Destroy() end
-    
-    local sg = Instance.new("ScreenGui")
-    sg.Name = "Anggazyy_Coordinates"
-    sg.ResetOnSpawn = false
-    sg.Parent = CoreGui
-
-    local frame = Instance.new("Frame", sg)
-    frame.Size = UDim2.new(0, 220, 0, 40)
-    frame.Position = UDim2.new(0.5, -110, 0, 15)
-    frame.BackgroundColor3 = COLOR_SECONDARY
-    frame.BackgroundTransparency = 0.1
-    frame.BorderSizePixel = 0
-    
-    local corner = Instance.new("UICorner", frame)
-    corner.CornerRadius = UDim.new(0.3, 0)
-    
-    local stroke = Instance.new("UIStroke", frame)
-    stroke.Color = COLOR_PRIMARY
-    stroke.Thickness = 1.6
-
-    local label = Instance.new("TextLabel", frame)
-    label.Size = UDim2.new(1, -12, 1, 0)
-    label.Position = UDim2.new(0, 6, 0, 0)
-    label.BackgroundTransparency = 1
-    label.TextColor3 = Color3.fromRGB(235, 235, 245)
-    label.Font = Enum.Font.GothamSemibold
-    label.TextSize = 14
-    label.Text = "X: 0 | Y: 0 | Z: 0"
-    label.TextXAlignment = Enum.TextXAlignment.Left
-
-    coordinateGui = sg
-
-    task.spawn(function()
-        while coordinateGui and coordinateGui.Parent do
-            local char = LocalPlayer.Character
-            if char and char:FindFirstChild("HumanoidRootPart") then
-                local pos = char.HumanoidRootPart.Position
-                label.Text = string.format("X: %d | Y: %d | Z: %d", math.floor(pos.X), math.floor(pos.Y), math.floor(pos.Z))
-            else
-                label.Text = "X: - | Y: - | Z: -"
-            end
-            task.wait(0.12)
-        end
-    end)
-end
-
-local function DestroyCoordinateDisplay()
-    if coordinateGui and coordinateGui.Parent then
-        pcall(function() coordinateGui:Destroy() end)
-        coordinateGui = nil
-    end
-end
-
 -- =============================================================================
 -- WINDUI MAIN WINDOW CREATION
 -- =============================================================================
@@ -1944,8 +1403,6 @@ MerchantTab:Button({
         local displayNames = MerchantLite.GetItemDisplayNames()
         
         if #displayNames > 0 then
-            -- Update dropdown values
-            -- Note: WindUI doesn't have direct dropdown update, so we'll show notification
             Notify({
                 Title = "Merchant Items",
                 Content = string.format("Loaded %d available items", #items),
@@ -2026,338 +1483,6 @@ MerchantTab:Button({
                 break
             end
         end
-    end
-})
-
--- ========== BYPASS TAB ==========
-local BypassTab = Window:Tab({
-    Title = "Bypass",
-    Icon = "radar",
-})
-
-BypassTab:Section({
-    Title = "Game Bypass Features",
-    Desc = "Advanced features to enhance gameplay",
-})
-
--- Fishing Radar Section
-BypassTab:Section({
-    Title = "Fishing Radar",
-    TextSize = 18,
-    FontWeight = Enum.FontWeight.SemiBold,
-})
-
-BypassTab:Toggle({
-    Title = "Fishing Radar",
-    Flag = "FishingRadarToggle",
-    Default = false,
-    Callback = function(state)
-        if state then
-            StartFishingRadar()
-        else
-            StopFishingRadar()
-        end
-    end
-})
-
-BypassTab:Button({
-    Title = "Toggle Radar",
-    Icon = "radar",
-    Callback = SafeToggleRadar
-})
-
-BypassTab:Space()
-
--- Diving Gear Section
-BypassTab:Section({
-    Title = "Diving Gear",
-    TextSize = 18,
-    FontWeight = Enum.FontWeight.SemiBold,
-})
-
-BypassTab:Toggle({
-    Title = "Diving Gear",
-    Flag = "DivingGearToggle",
-    Default = false,
-    Callback = function(state)
-        if state then
-            StartDivingGear()
-        else
-            StopDivingGear()
-        end
-    end
-})
-
-BypassTab:Button({
-    Title = "Toggle Diving Gear",
-    Icon = "diving",
-    Callback = SafeToggleDivingGear
-})
-
-BypassTab:Space()
-
--- Auto Sell Section
-BypassTab:Section({
-    Title = "Auto Sell Fish",
-    TextSize = 18,
-    FontWeight = Enum.FontWeight.SemiBold,
-})
-
-BypassTab:Toggle({
-    Title = "Auto Sell Fish",
-    Desc = "Automatically sell fish when threshold is reached",
-    Flag = "AutoSellToggle",
-    Default = false,
-    Callback = function(state)
-        if state then
-            StartAutoSell()
-        else
-            StopAutoSell()
-        end
-    end
-})
-
-BypassTab:Slider({
-    Title = "Sell Threshold",
-    Desc = "Minimum fish count to trigger auto sell",
-    Flag = "AutoSellThreshold",
-    Step = 1,
-    Value = {
-        Min = 1,
-        Max = 50,
-        Default = 3,
-    },
-    Callback = function(value)
-        SetAutoSellThreshold(value)
-    end
-})
-
-BypassTab:Button({
-    Title = "Sell All Fish Now",
-    Icon = "dollar-sign",
-    Callback = ManualSellAllFish
-})
-
-BypassTab:Space()
-
--- Trick or Treat Section
-BypassTab:Section({
-    Title = "🎃 Trick or Treat",
-    TextSize = 18,
-    FontWeight = Enum.FontWeight.SemiBold,
-})
-
-BypassTab:Toggle({
-    Title = "Auto Trick or Treat",
-    Desc = "Automatically knocks on all Trick or Treat doors",
-    Flag = "AutoTrickTreatToggle",
-    Default = false,
-    Callback = function(state)
-        if state then
-            StartAutoTrickTreat()
-        else
-            StopAutoTrickTreat()
-        end
-    end
-})
-
-BypassTab:Button({
-    Title = "Knock All Doors Now",
-    Icon = "door-open",
-    Callback = ManualKnockAllDoors
-})
-
-BypassTab:Space()
-
--- Quick Actions Section
-BypassTab:Section({
-    Title = "Quick Actions",
-    TextSize = 18,
-    FontWeight = Enum.FontWeight.SemiBold,
-})
-
-BypassTab:Button({
-    Title = "Enable All Bypass",
-    Icon = "play",
-    Color = Color3.fromHex("#30ff6a"),
-    Justify = "Center",
-    Callback = function()
-        StartFishingRadar()
-        StartDivingGear()
-        StartAutoSell()
-        StartAutoTrickTreat()
-        Notify({Title = "Bypass", Content = "All bypass features enabled", Duration = 3})
-    end
-})
-
-BypassTab:Button({
-    Title = "Disable All Bypass",
-    Icon = "square",
-    Color = Color3.fromHex("#ff4830"),
-    Justify = "Center",
-    Callback = function()
-        StopFishingRadar()
-        StopDivingGear()
-        StopAutoSell()
-        StopAutoTrickTreat()
-        Notify({Title = "Bypass", Content = "All bypass features disabled", Duration = 3})
-    end
-})
-
--- ========== PLAYER CONFIGURATION TAB ==========
-local PlayerConfigTab = Window:Tab({
-    Title = "Player Config",
-    Icon = "settings",
-})
-
--- Performance Section
-PlayerConfigTab:Section({
-    Title = "Performance",
-    TextSize = 20,
-    FontWeight = Enum.FontWeight.SemiBold,
-})
-
-PlayerConfigTab:Toggle({
-    Title = "Ultra Anti Lag",
-    Desc = "White texture mode for maximum performance",
-    Flag = "AntiLagToggle",
-    Default = false,
-    Callback = function(state)
-        if state then
-            EnableAntiLag()
-        else
-            DisableAntiLag()
-        end
-    end
-})
-
-PlayerConfigTab:Space()
-
--- Anti AFK Section - DITAMBAHKAN DI PLAYER CONFIG
-PlayerConfigTab:Section({
-    Title = "Anti AFK System",
-    TextSize = 20,
-    FontWeight = Enum.FontWeight.SemiBold,
-})
-
-PlayerConfigTab:Toggle({
-    Title = "Anti AFK + Auto Reconnect",
-    Desc = "Prevent AFK kick and auto reconnect if disconnected",
-    Flag = "AntiAFKToggle",
-    Default = false,
-    Callback = function(state)
-        ToggleAntiAFK(state)
-    end
-})
-
-PlayerConfigTab:Space()
-
--- Position Section
-PlayerConfigTab:Section({
-    Title = "Position Management",
-    TextSize = 20,
-    FontWeight = Enum.FontWeight.SemiBold,
-})
-
-PlayerConfigTab:Button({
-    Title = "Save Position",
-    Icon = "bookmark",
-    Callback = SaveCurrentPosition
-})
-
-PlayerConfigTab:Button({
-    Title = "Load Position",
-    Icon = "navigation",
-    Callback = LoadSavedPosition
-})
-
-PlayerConfigTab:Toggle({
-    Title = "Lock Position",
-    Desc = "Prevent movement from saved position",
-    Flag = "LockPositionToggle",
-    Default = false,
-    Callback = function(state)
-        if state then
-            StartLockPosition()
-        else
-            StopLockPosition()
-        end
-    end
-})
-
-PlayerConfigTab:Space()
-
--- Movement Configuration - DIPINDAHKAN DARI PLAYER STATS
-PlayerConfigTab:Section({
-    Title = "Movement Configuration",
-    TextSize = 20,
-    FontWeight = Enum.FontWeight.SemiBold,
-})
-
-PlayerConfigTab:Slider({
-    Title = "Walk Speed",
-    Desc = "Adjust player movement speed",
-    Flag = "WalkSpeed",
-    Step = 1,
-    Value = {
-        Min = 16,
-        Max = 200,
-        Default = 16,
-    },
-    Callback = function(val)
-        if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid") then
-            LocalPlayer.Character.Humanoid.WalkSpeed = val
-        end
-    end
-})
-
-PlayerConfigTab:Slider({
-    Title = "Jump Power",
-    Desc = "Adjust player jump height",
-    Flag = "JumpPower",
-    Step = 1,
-    Value = {
-        Min = 50,
-        Max = 350,
-        Default = 50,
-    },
-    Callback = function(val)
-        if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid") then
-            LocalPlayer.Character.Humanoid.JumpPower = val
-        end
-    end
-})
-
-PlayerConfigTab:Button({
-    Title = "Reset Movement",
-    Icon = "refresh-cw",
-    Callback = function()
-        if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid") then
-            LocalPlayer.Character.Humanoid.WalkSpeed = 16
-            LocalPlayer.Character.Humanoid.JumpPower = 50
-            Notify({Title = "Reset", Content = "Movement reset to default", Duration = 2})
-        end
-    end
-})
-
-PlayerConfigTab:Space()
-
--- Quick Actions
-PlayerConfigTab:Section({
-    Title = "Quick Actions",
-    TextSize = 20,
-    FontWeight = Enum.FontWeight.SemiBold,
-})
-
-PlayerConfigTab:Button({
-    Title = "Max Performance",
-    Icon = "zap",
-    Color = Color3.fromHex("#30a2ff"),
-    Justify = "Center",
-    Callback = function()
-        EnableAntiLag()
-        ToggleAntiAFK(true)
-        Notify({Title = "Performance", Content = "Maximum performance enabled", Duration = 2})
     end
 })
 
@@ -2448,20 +1573,6 @@ TeleportTab:Button({
     end
 })
 
-TeleportTab:Toggle({
-    Title = "Show Coordinates",
-    Desc = "Display current position coordinates",
-    Flag = "ShowCoords",
-    Default = false,
-    Callback = function(v)
-        if v then
-            CreateCoordinateDisplay()
-        else
-            DestroyCoordinateDisplay()
-        end
-    end
-})
-
 -- ========== SETTINGS TAB ==========
 local SettingsTab = Window:Tab({
     Title = "Settings",
@@ -2480,102 +1591,10 @@ SettingsTab:Button({
     Justify = "Center",
     Callback = function()
         StopAutoFish()
-        StopLockPosition()
-        DisableAntiLag()
-        StopFishingRadar()
-        StopDivingGear()
-        StopAutoSell()
-        StopAutoTrickTreat()
         ToggleBlatantMode(false)
-        DestroyCoordinateDisplay()
         Window:Destroy()
         Notify({Title = "Unload", Content = "Hub unloaded successfully", Duration = 2})
     end
-})
-
--- DITAMBAHKAN: Reload UI Button
-SettingsTab:Button({
-    Title = "Reload UI",
-    Icon = "refresh-cw",
-    Color = Color3.fromHex("#30a2ff"),
-    Justify = "Center",
-    Callback = function()
-        Notify({
-            Title = "Reloading UI",
-            Content = "Please re-execute the script to reload the UI",
-            Duration = 3
-        })
-        
-        -- Clean up everything
-        StopAutoFish()
-        StopLockPosition()
-        DisableAntiLag()
-        StopFishingRadar()
-        StopDivingGear()
-        StopAutoSell()
-        StopAutoTrickTreat()
-        ToggleBlatantMode(false)
-        DestroyCoordinateDisplay()
-        
-        -- Destroy current window
-        Window:Destroy()
-        
-        -- Notification to re-execute
-        task.wait(2)
-        WindUI:Popup({
-            Title = "UI Reload Required",
-            Icon = "refresh-cw",
-            Content = "Please re-execute the script to reload the Anggazyy Hub UI with updated features.",
-            Buttons = {
-                {
-                    Title = "OK",
-                    Icon = "check",
-                }
-            }
-        })
-    end
-})
-
-SettingsTab:Button({
-    Title = "Clean UI",
-    Icon = "trash-2",
-    Justify = "Center",
-    Callback = function()
-        for _, obj in ipairs(CoreGui:GetDescendants()) do
-            pcall(function()
-                if (obj:IsA("ImageLabel") or obj:IsA("ImageButton") or obj:IsA("TextLabel")) then
-                    local name = (obj.Name or ""):lower()
-                    local text = (obj.Text or ""):lower()
-                    if string.find(name, "money") or string.find(text, "money") then
-                        obj.Visible = false
-                    end
-                end
-            end)
-        end
-        Notify({Title = "Clean", Content = "UI cleaned", Duration = 2})
-    end
-})
-
-SettingsTab:Space()
-
-SettingsTab:Section({
-    Title = "System Information",
-    Desc = "Hub status and version",
-})
-
-SettingsTab:Section({
-    Title = [[Anggazyy Hub v2.0
-• Auto Fishing System
-• Blatant Fishing Mode  
-• Weather Machine
-• Merchant System
-• Bypass Features
-• Player Configuration
-• Teleportation System
-
-Status: ✅ Fully Operational]],
-    TextSize = 14,
-    TextTransparency = 0.3,
 })
 
 -- Initial Notification
