@@ -1,12 +1,3 @@
-
-update blantant sistem saya
-
-pada bagian BlatantCastMethod1 , BlatantCastFishingRod
-fungsi untuk melempar kail, nah disitu sudah otomatis bypass minigame , dan loopingnya nah saya mau disini adalah
-
-setelah dia melempar kail jangan tunggu ikan makan , langsung lempar lagi jangan langsung masuk ke throw session atau apalah itu, setelah di aktifkan langsung lempar jika sudab terlempar kail disitu akan menunggu ikan nya kan, nah langsung lempar lagi kail nya gak usah nunggu nunggu fish makan, tetapi yang sudah terlempar itu akan naik ikannya seperti spam fish 
-
-
 -- CONFIG: ubah sesuai kebutuhan
 local AUTO_FISH_REMOTE_NAME = "UpdateAutoFishingState"
 local NET_PACKAGES_FOLDER = "Packages"
@@ -96,7 +87,7 @@ local Constants_upvr = nil
 
 -- Blatant Fishing Configuration
 local blatantReelDelay = 0.5  -- Default delay reel
-local blatantFishingDelay = 0.0015  -- PERUBAHAN: Delay fishing di set rendah untuk SPAM CAST
+local blatantFishingDelay = 0.1  -- PERUBAHAN: Delay fishing di set rendah untuk SPAM CAST
 
 -- UI Configuration
 local COLOR_ENABLED = Color3.fromRGB(76, 175, 80)  -- Green
@@ -311,7 +302,9 @@ local function AutoFishComplete(rodData, minigameData)
     print("⚡ Blatant Mode: Minigame Bypassed. Fish Retrieved.")
 
     -- PERUBAHAN: Hapus delay di sini. Loop casting yang akan mengontrol delay.
-    -- (Tidak ada task.wait(blatantFishingDelay) di sini)
+    -- if blatantFishingDelay > 0 then
+    --     task.wait(blatantFishingDelay)
+    -- end
 end
 
 -- Fungsi HOOK untuk menimpa 'FishingRodStarted'
@@ -421,7 +414,6 @@ local function BlatantCastFishingRod()
     local success = BlatantCastMethod1()
     if success then
         -- Casting berhasil, segera kembalikan 'true' agar loop bisa lempar lagi
-        -- Tidak ada penundaan di sini, hanya logika melempar.
         print("✅ Blatant Cast: Method 1 (Spam Cast) successful")
         return true
     end
@@ -443,7 +435,6 @@ local function BlatantFishingLoop()
         end
 
         -- Delay murni untuk mengontrol kecepatan spam cast (cooldown antar lemparan)
-        -- Ini adalah delay yang mengatur seberapa cepat kail dilempar lagi.
         task.wait(blatantFishingDelay)
     end
 end
