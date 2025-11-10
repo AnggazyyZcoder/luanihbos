@@ -114,7 +114,7 @@ local WindUI = loadstring(game:HttpGet("https://raw.githubusercontent.com/Footag
 task.spawn(function()
     task.wait(1) -- Tunggu sebentar agar UI siap
     WindUI:Popup({
-        Title = "KONTOLLLS?!",
+        Title = "XKXKXKKXKXLS?!",
         Icon = "fish",
         Content = "Thank you for using Anggazyy Hub - Fish It Automation\n\nScript ini 100% Gratis dan tidak diperjualbelikan",
         Buttons = {
@@ -135,192 +135,199 @@ end)
 local MerchantLite = {}
 
 function MerchantLite.Initialize()
-    local success, result = pcall(function()
-        -- Load required modules
-        local Replion = require(ReplicatedStorage.Packages.Replion)
-        local ItemUtility = require(ReplicatedStorage.Shared.ItemUtility)
-        local TierUtility = require(ReplicatedStorage.Shared.TierUtility)
-        local CurrencyUtility = require(ReplicatedStorage.Modules.CurrencyUtility)
-        local MarketItemData = require(ReplicatedStorage.Shared.MarketItemData)
-        local InventoryMapping = require(ReplicatedStorage.Shared.InventoryMapping)
-        local PlayerStatsUtility = require(ReplicatedStorage.Shared.PlayerStatsUtility)
-        local Net = require(ReplicatedStorage.Packages.Net)
-        
-        -- RemoteFunction untuk pembelian
-        local PurchaseRemote = Net:RemoteFunction("PurchaseMarketItem")
-        
-        -- Variabel utama
-        local LocalPlayer = Players.LocalPlayer
-        local MerchantData = Replion.Client:WaitReplion("Merchant")
-        local PlayerData = Replion.Client:WaitReplion("Data")
-        
-        ------------------------------------------------------------
-        -- Fungsi untuk menampilkan daftar item coin-only (bukan crate)
-        ------------------------------------------------------------
-        function MerchantLite.ListCoinItems()
-            local items = {}
-            for _, v in ipairs(MerchantData:GetExpect("Items")) do
-                local data = MerchantLite.GetMarketDataFromId(v)
-                if data and not data.SkinCrate and data.Currency == "Coins" then
-                    local itemInfo = {
-                        Name = data.Name or "Unknown",
-                        Id = data.Id,
-                        Price = data.Price or 0,
-                        Currency = data.Currency,
-                        Owned = MerchantLite.OwnsLocalItem(data),
-                        DisplayName = data.Name .. " - " .. tostring(data.Price) .. " Coins"
-                    }
-                    table.insert(items, itemInfo)
-                end
-            end
+	local success, result = pcall(function()
+		local ReplicatedStorage = game:GetService("ReplicatedStorage")
+		local Players = game:GetService("Players")
+		
+		-- Load required modules
+		local Replion = require(ReplicatedStorage.Packages.Replion)
+		local ItemUtility = require(ReplicatedStorage.Shared.ItemUtility)
+		local TierUtility = require(ReplicatedStorage.Shared.TierUtility)
+		local CurrencyUtility = require(ReplicatedStorage.Modules.CurrencyUtility)
+		local MarketItemData = require(ReplicatedStorage.Shared.MarketItemData)
+		local InventoryMapping = require(ReplicatedStorage.Shared.InventoryMapping)
+		local PlayerStatsUtility = require(ReplicatedStorage.Shared.PlayerStatsUtility)
+		local Net = require(ReplicatedStorage.Packages.Net)
+		local TextNotificationController = require(ReplicatedStorage.Client.TextNotificationController)
 
-            -- Sort by price
-            table.sort(items, function(a, b)
-                return a.Price < b.Price
-            end)
+		-- Remote untuk pembelian
+		local PurchaseRemote = Net:RemoteFunction("PurchaseMarketItem")
 
-            return items
-        end
+		-- Variabel utama
+		local LocalPlayer = Players.LocalPlayer
+		local MerchantData = Replion.Client:WaitReplion("Merchant")
+		local PlayerData = Replion.Client:WaitReplion("Data")
 
-        ------------------------------------------------------------
-        -- Fungsi untuk cek apakah player sudah punya item
-        ------------------------------------------------------------
-        function MerchantLite.OwnsLocalItem(data)
-            local itemInfo = ItemUtility.GetItemDataFromItemType(data.Type, data.Identifier)
-            if not itemInfo then
-                return false
-            end
+		------------------------------------------------------------
+		-- Fungsi ambil data item dari MarketItemData
+		------------------------------------------------------------
+		function MerchantLite.GetMarketDataFromId(id)
+			for _, v in pairs(MarketItemData) do
+				if v.Id == id then
+					return v
+				end
+			end
+			return nil
+		end
 
-            local found = PlayerStatsUtility:GetItemFromInventory(PlayerData, function(item)
-                return item.Id == itemInfo.Data.Id
-            end, InventoryMapping[data.Type or "Items"])
+		------------------------------------------------------------
+		-- Fungsi untuk cek apakah player sudah punya item
+		------------------------------------------------------------
+		function MerchantLite.OwnsLocalItem(data)
+			if not data.Type or not data.Identifier then
+				return false
+			end
 
-            return found ~= nil
-        end
+			local itemInfo = ItemUtility.GetItemDataFromItemType(data.Type, data.Identifier)
+			if not itemInfo then
+				return false
+			end
 
-        ------------------------------------------------------------
-        -- Fungsi ambil data item dari MarketItemData
-        ------------------------------------------------------------
-        function MerchantLite.GetMarketDataFromId(id)
-            for _, v in pairs(MarketItemData) do
-                if v.Id == id then
-                    return v
-                end
-            end
-            return nil
-        end
+			local found = PlayerStatsUtility:GetItemFromInventory(PlayerData, function(item)
+				return item.Id == itemInfo.Data.Id
+			end, InventoryMapping[data.Type or "Items"])
 
-        ------------------------------------------------------------
-        -- Fungsi pembelian item coin-only
-        ------------------------------------------------------------
-        function MerchantLite.BuyItem(itemId)
-            local item = MerchantLite.GetMarketDataFromId(itemId)
-            if not item then
-                warn("❌ Item not found for ID:", itemId)
-                return false, "Item not found"
-            end
+			return found ~= nil
+		end
 
-            -- skip crate & robux item
-            if item.SkinCrate or item.Currency == "Robux" then
-                warn("⏩ Skipped non-coin item:", itemId)
-                return false, "Non-coin items not supported"
-            end
+		------------------------------------------------------------
+		-- Fungsi untuk menampilkan daftar item coin-only (bukan crate)
+		------------------------------------------------------------
+		function MerchantLite.ListCoinItems()
+			local items = {}
+			local merchantItems = MerchantData:GetExpect("items") or MerchantData:GetExpect("Items") or {}
 
-            -- cek koin player cukup tidak
-            local currency = CurrencyUtility:GetCurrency(item.Currency)
-            if not currency then
-                warn("❌ Invalid currency for:", itemId)
-                return false, "Invalid currency"
-            end
+			for _, v in ipairs(merchantItems) do
+				local itemId = v.Id or v.id or v.ItemId
+				local data = MerchantLite.GetMarketDataFromId(itemId)
 
-            local playerCoins = PlayerData:Get(currency.Path) or 0
-            if playerCoins < item.Price then
-                TextNotificationController:DeliverNotification({
-                    Type = "Text",
-                    Text = "You don't have enough coins!",
-                    TextColor = { R = 255, G = 0, B = 0 },
-                })
-                return false, "Not enough coins"
-            end
+				if data and not data.SkinCrate and data.Currency == "Coins" then
+					local owned = MerchantLite.OwnsLocalItem(data)
+					local itemInfo = {
+						Name = data.Name or "Unknown",
+						Id = data.Id,
+						Price = data.Price or data.Cost or 0,
+						Currency = data.Currency,
+						Owned = owned,
+						DisplayName = ("%s - %s Coins [%s]"):format(data.Name or "Unknown", data.Price or 0, owned and "Owned" or "Not Owned")
+					}
+					table.insert(items, itemInfo)
+				end
+			end
 
-            -- kirim pembelian ke server
-            local success = PurchaseRemote:InvokeServer(itemId)
-            if success then
-                TextNotificationController:DeliverNotification({
-                    Type = "Text",
-                    Text = ("Purchased %s successfully!"):format(item.Name),
-                    TextColor = { R = 0, G = 255, B = 0 },
-                })
-                return true, "Purchase successful"
-            else
-                TextNotificationController:DeliverNotification({
-                    Type = "Text",
-                    Text = ("Purchase failed for %s."):format(item.Name),
-                    TextColor = { R = 255, G = 0, B = 0 },
-                })
-                return false, "Purchase failed"
-            end
-        end
+			table.sort(items, function(a, b)
+				return a.Price < b.Price
+			end)
 
-        -- Load items initially
-        merchantItems = MerchantLite.ListCoinItems()
-        
-        return true
-    end)
-    
-    if success then
-        Notify({Title = "Merchant System", Content = "Merchant system initialized successfully", Duration = 3})
-        return true
-    else
-        Notify({Title = "Merchant Error", Content = "Failed to initialize merchant: " .. tostring(result), Duration = 4})
-        return false
-    end
+			return items
+		end
+
+		------------------------------------------------------------
+		-- Fungsi pembelian item coin-only
+		------------------------------------------------------------
+		function MerchantLite.BuyItem(itemId)
+			local item = MerchantLite.GetMarketDataFromId(itemId)
+			if not item then
+				warn("❌ Item not found for ID:", itemId)
+				return false, "Item not found"
+			end
+
+			if item.SkinCrate or item.Currency ~= "Coins" then
+				warn("⏩ Skipped non-coin item:", itemId)
+				return false, "Non-coin items not supported"
+			end
+
+			local currency = CurrencyUtility:GetCurrency(item.Currency)
+			if not currency then
+				warn("❌ Invalid currency for:", itemId)
+				return false, "Invalid currency"
+			end
+
+			local playerCoins = PlayerData:Get(currency.Path) or 0
+			if playerCoins < (item.Price or item.Cost or 0) then
+				TextNotificationController:DeliverNotification({
+					Type = "Text",
+					Text = "You don't have enough coins!",
+					TextColor = { R = 255, G = 0, B = 0 },
+				})
+				return false, "Not enough coins"
+			end
+
+			local success = PurchaseRemote:InvokeServer(item.Id)
+			if success then
+				TextNotificationController:DeliverNotification({
+					Type = "Text",
+					Text = ("Purchased %s successfully!"):format(item.Name),
+					TextColor = { R = 0, G = 255, B = 0 },
+				})
+				return true, "Purchase successful"
+			else
+				TextNotificationController:DeliverNotification({
+					Type = "Text",
+					Text = ("Purchase failed for %s."):format(item.Name),
+					TextColor = { R = 255, G = 0, B = 0 },
+				})
+				return false, "Purchase failed"
+			end
+		end
+
+		-- Load awal
+		merchantItems = MerchantLite.ListCoinItems()
+		return true
+	end)
+
+	if success then
+		print("✅ Merchant system initialized successfully")
+		return true
+	else
+		warn("❌ Failed to initialize merchant:", result)
+		return false
+	end
 end
 
--- Function to refresh merchant items
+------------------------------------------------------------
+-- Fungsi tambahan
+------------------------------------------------------------
 function MerchantLite.RefreshItems()
-    local success, result = pcall(function()
-        merchantItems = MerchantLite.ListCoinItems()
-        return merchantItems
-    end)
-    
-    if success then
-        return merchantItems
-    else
-        warn("Failed to refresh merchant items:", result)
-        return {}
-    end
+	local success, result = pcall(function()
+		merchantItems = MerchantLite.ListCoinItems()
+		return merchantItems
+	end)
+	if success then
+		return merchantItems
+	else
+		warn("Failed to refresh merchant items:", result)
+		return {}
+	end
 end
 
--- Function to get display names for dropdown
 function MerchantLite.GetItemDisplayNames()
-    local names = {}
-    for _, item in ipairs(merchantItems) do
-        table.insert(names, item.DisplayName)
-    end
-    return names
+	local names = {}
+	for _, item in ipairs(merchantItems or {}) do
+		table.insert(names, item.DisplayName)
+	end
+	return names
 end
 
--- Function to buy selected item by display name
 function MerchantLite.BuyItemByDisplayName(displayName)
-    for _, item in ipairs(merchantItems) do
-        if item.DisplayName == displayName then
-            return MerchantLite.BuyItem(item.Id)
-        end
-    end
-    return false, "Item not found"
+	for _, item in ipairs(merchantItems or {}) do
+		if item.DisplayName == displayName then
+			return MerchantLite.BuyItem(item.Id)
+		end
+	end
+	return false, "Item not found"
 end
 
--- Function to get item by display name
 function MerchantLite.GetItemByDisplayName(displayName)
-    for _, item in ipairs(merchantItems) do
-        if item.DisplayName == displayName then
-            return item
-        end
-    end
-    return nil
+	for _, item in ipairs(merchantItems or {}) do
+		if item.DisplayName == displayName then
+			return item
+		end
+	end
+	return nil
 end
 
+return MerchantLite
 -- =============================================================================
 -- ANTI AFK SYSTEM - Taruh di bagian Player Config
 -- =============================================================================
