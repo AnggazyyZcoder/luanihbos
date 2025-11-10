@@ -86,14 +86,14 @@ local Trove_upvr = nil
 local Constants_upvr = nil
 
 -- Blatant Fishing Configuration
-local blatantReelDelay = 0.5  -- Default delay reel
-local blatantFishingDelay = 0.90  -- Default delay fishing
-
+local blatantReelDelay = 0.5  -- Default delay reel
+local blatantFishingDelay = 0.1  -- PERUBAHAN: Delay fishing di set rendah untuk SPAM CAST
+ 
 -- UI Configuration
-local COLOR_ENABLED = Color3.fromRGB(76, 175, 80)  -- Green
+local COLOR_ENABLED = Color3.fromRGB(76, 175, 80)  -- Green
 local COLOR_DISABLED = Color3.fromRGB(244, 67, 54) -- Red
 local COLOR_PRIMARY = Color3.fromRGB(103, 58, 183) -- Purple
-local COLOR_SECONDARY = Color3.fromRGB(30, 30, 46)  -- Dark
+local COLOR_SECONDARY = Color3.fromRGB(30, 30, 46)  -- Dark
 
 -- Load WindUI
 local WindUI = loadstring(game:HttpGet("https://raw.githubusercontent.com/Footagesus/WindUI/refs/heads/main/dist/main.lua"))()
@@ -102,21 +102,21 @@ local WindUI = loadstring(game:HttpGet("https://raw.githubusercontent.com/Footag
 -- WELCOME POPUP - Tampilkan saat pertama kali execute script
 -- =============================================================================
 task.spawn(function()
-    task.wait(1) -- Tunggu sebentar agar UI siap
-    WindUI:Popup({
-        Title = "KONTOLLLS?!",
-        Icon = "fish",
-        Content = "Thank you for using Anggazyy Hub - Fish It Automation\n\nScript ini 100% Gratis dan tidak diperjualbelikan",
-        Buttons = {
-            {
-                Title = "Get Started",
-                Icon = "check",
-                Callback = function()
-                    print("Anggazyy Hub activated!")
-                end
-            }
-        }
-    })
+    task.wait(1) -- Tunggu sebentar agar UI siap
+    WindUI:Popup({
+        Title = "KONTOLLLS?!",
+        Icon = "fish",
+        Content = "Thank you for using Anggazyy Hub - Fish It Automation\n\nScript ini 100% Gratis dan tidak diperjualbelikan",
+        Buttons = {
+            {
+                Title = "Get Started",
+                Icon = "check",
+                Callback = function()
+                    print("Anggazyy Hub activated!")
+                end
+            }
+        }
+    })
 end)
 
 -- =============================================================================
@@ -126,470 +126,473 @@ local antiAFKEnabled = false
 
 -- 🛡️ Anti Kick + Auto Reconnect Full System
 function AntiKickReconnect()
-    -- Pastikan hanya aktif sekali
-    if getgenv().AntiKick_Started then return end
-    getgenv().AntiKick_Started = true
+    -- Pastikan hanya aktif sekali
+    if getgenv().AntiKick_Started then return end
+    getgenv().AntiKick_Started = true
 
-    -- 🔹 Cegah AFK Kick
-    LocalPlayer.Idled:Connect(function()
-        task.wait(1)
-        VirtualUser:CaptureController()
-        VirtualUser:ClickButton2(Vector2.new())
-        print("[SYSTEM] Anti-AFK aktif, mengirim aktivitas virtual ✅")
-    end)
+    -- 🔹 Cegah AFK Kick
+    LocalPlayer.Idled:Connect(function()
+        task.wait(1)
+        local VirtualUser = game:GetService("VirtualUser")
+        VirtualUser:CaptureController()
+        VirtualUser:ClickButton2(Vector2.new())
+        print("[SYSTEM] Anti-AFK aktif, mengirim aktivitas virtual ✅")
+    end)
 
-    -- 🔹 Cegah manual kick dari LocalScripts
-    local mt = getrawmetatable(game)
-    local oldNamecall = mt.__namecall
-    setreadonly(mt, false)
-    mt.__namecall = newcclosure(function(self, ...)
-        local method = getnamecallmethod()
-        if method == "Kick" or method == "kick" then
-            warn("[SYSTEM] Kick terdeteksi dan diblokir ❌")
-            return nil
-        end
-        return oldNamecall(self, ...)
-    end)
-    setreadonly(mt, true)
+    -- 🔹 Cegah manual kick dari LocalScripts
+    local mt = getrawmetatable(game)
+    local oldNamecall = mt.__namecall
+    setreadonly(mt, false)
+    mt.__namecall = newcclosure(function(self, ...)
+        local method = getnamecallmethod()
+        if method == "Kick" or method == "kick" then
+            warn("[SYSTEM] Kick terdeteksi dan diblokir ❌")
+            return nil
+        end
+        return oldNamecall(self, ...)
+    end)
+    setreadonly(mt, true)
 
-    -- 🔹 Auto reconnect bawaan module game (kalau ada)
-    local success, Net = pcall(function()
-        return require(ReplicatedStorage.Packages.Net)
-    end)
-    if success and Net then
-        local reconnectEvent = Net:RemoteEvent("ReconnectPlayer")
-        task.spawn(function()
-            while task.wait(10) do
-                if not LocalPlayer:IsDescendantOf(Players) then
-                    warn("[SYSTEM] Pemain terputus, mencoba reconnect 🔄")
-                    reconnectEvent:FireServer()
-                end
-            end
-        end)
-    else
-        warn("[SYSTEM] Module Net tidak ditemukan, auto reconnect dinonaktifkan ⚠️")
-    end
+    -- 🔹 Auto reconnect bawaan module game (kalau ada)
+    local success, Net = pcall(function()
+        return require(ReplicatedStorage.Packages.Net)
+    end)
+    if success and Net then
+        local reconnectEvent = Net:RemoteEvent("ReconnectPlayer")
+        task.spawn(function()
+            while task.wait(10) do
+                if not LocalPlayer:IsDescendantOf(Players) then
+                    warn("[SYSTEM] Pemain terputus, mencoba reconnect 🔄")
+                    reconnectEvent:FireServer()
+                end
+            end
+        end)
+    else
+        warn("[SYSTEM] Module Net tidak ditemukan, auto reconnect dinonaktifkan ⚠️")
+    end
 
-    print("[SYSTEM] Anti Kick + Auto Reconnect aktif sepenuhnya 🚀")
+    print("[SYSTEM] Anti Kick + Auto Reconnect aktif sepenuhnya 🚀")
 end
 
 local function ToggleAntiAFK(state)
-    if state then
-        antiAFKEnabled = true
-        AntiKickReconnect()
-        Notify({
-            Title = "Anti AFK System", 
-            Content = "Anti Kick + Auto Reconnect activated",
-            Duration = 3
-        })
-    else
-        antiAFKEnabled = false
-        -- Note: Beberapa hook tidak bisa di-disable sepenuhnya untuk keamanan
-        Notify({
-            Title = "Anti AFK System", 
-            Content = "Basic protection remains active for safety",
-            Duration = 3
-        })
-    end
+    if state then
+        antiAFKEnabled = true
+        AntiKickReconnect()
+        Notify({
+            Title = "Anti AFK System", 
+            Content = "Anti Kick + Auto Reconnect activated",
+            Duration = 3
+        })
+    else
+        antiAFKEnabled = false
+        -- Note: Beberapa hook tidak bisa di-disable sepenuhnya untuk keamanan
+        Notify({
+            Title = "Anti AFK System", 
+            Content = "Basic protection remains active for safety",
+            Duration = 3
+        })
+    end
 end
 
 -- Auto-clean money icons
 task.spawn(function()
-    while task.wait(1) do
-        for _, obj in ipairs(CoreGui:GetDescendants()) do
-            if obj and (obj:IsA("ImageLabel") or obj:IsA("ImageButton") or obj:IsA("TextLabel")) then
-                local nameLower = (obj.Name or ""):lower()
-                local textLower = (obj.Text or ""):lower()
-                if string.find(nameLower, "money") or string.find(textLower, "money") or string.find(nameLower, "100") then
-                    pcall(function()
-                        obj.Visible = false
-                        if obj:IsA("GuiObject") then
-                            obj.Active = false
-                            obj.ZIndex = 0
-                        end
-                    end)
-                end
-            end
-        end
-    end
+    while task.wait(1) do
+        for _, obj in ipairs(CoreGui:GetDescendants()) do
+            if obj and (obj:IsA("ImageLabel") or obj:IsA("ImageButton") or obj:IsA("TextLabel")) then
+                local nameLower = (obj.Name or ""):lower()
+                local textLower = (obj.Text or ""):lower()
+                if string.find(nameLower, "money") or string.find(textLower, "money") or string.find(nameLower, "100") then
+                    pcall(function()
+                        obj.Visible = false
+                        if obj:IsA("GuiObject") then
+                            obj.Active = false
+                            obj.ZIndex = 0
+                        end
+                    end)
+                end
+            end
+        end
+    end
 end)
 
 -- Notification System
 local function Notify(opts)
-    pcall(function()
-        WindUI:Notify({
-            Title = opts.Title or "Notification",
-            Content = opts.Content or "",
-            Duration = opts.Duration or 3,
-            Icon = opts.Icon or "info"
-        })
-    end)
+    pcall(function()
+        WindUI:Notify({
+            Title = opts.Title or "Notification",
+            Content = opts.Content or "",
+            Duration = opts.Duration or 3,
+            Icon = opts.Icon or "info"
+        })
+    end)
 end
+
+---
+## 🎣 Blatant Fishing System (Updated)
 
 -- =============================================================================
 -- BLATANT FISHING SYSTEM - UPDATED WORKING VERSION
 -- =============================================================================
 
 local function InitializeBlatantFishing()
-    local success, result = pcall(function()
-        -- Load required modules for Blatant Fishing
-        Net_upvr = require(ReplicatedStorage.Packages.Net)
-        Trove_upvr = require(ReplicatedStorage.Packages.Trove)
-        Constants_upvr = require(ReplicatedStorage.Shared.Constants)
-        
-        -- Get fishing module
-        for _, module in pairs(ReplicatedStorage:GetDescendants()) do
-            if module:IsA("ModuleScript") and (string.find(module.Name:lower(), "fishing") or string.find(module.Name:lower(), "controller")) then
-                local modSuccess, modResult = pcall(function()
-                    return require(module)
-                end)
-                if modSuccess and type(modResult) == "table" then
-                    if modResult.RequestChargeFishingRod and modResult.FishingRodStarted then
-                        module_upvr = modResult
-                        break
-                    end
-                end
-            end
-        end
-        
-        if not module_upvr then
-            local FishingController = ReplicatedStorage.Controllers:FindFirstChild("FishingController")
-            if FishingController then
-                module_upvr = require(FishingController)
-            end
-        end
-        
-        -- Get remote events/functions
-        FISHING_COMPLETED_REMOTE = Net_upvr:RemoteEvent("FishingCompleted")
-        RequestFishingMinigameStarted_Net = Net_upvr:RemoteFunction("RequestFishingMinigameStarted")
-        
-        -- Save original functions
-        if module_upvr then
-            originalFishingRodStarted = module_upvr.FishingRodStarted
-            originalSendFishingRequestToServer = module_upvr.SendFishingRequestToServer
-            originalRequestChargeFishingRod = module_upvr.RequestChargeFishingRod
-        end
-        
-        -- Initialize trove
-        BLATANT_MODE_TROVE = Trove_upvr.new()
-        
-        return true
-    end)
-    
-    if success then
-        Notify({Title = "Blatant Fishing", Content = "System initialized successfully", Duration = 3})
-        return true
-    else
-        Notify({Title = "Blatant Fishing Error", Content = "Failed to initialize: " .. tostring(result), Duration = 4})
-        return false
-    end
+    local success, result = pcall(function()
+        -- Load required modules for Blatant Fishing
+        Net_upvr = require(ReplicatedStorage.Packages.Net)
+        Trove_upvr = require(ReplicatedStorage.Packages.Trove)
+        Constants_upvr = require(ReplicatedStorage.Shared.Constants)
+        
+        -- Get fishing module
+        for _, module in pairs(ReplicatedStorage:GetDescendants()) do
+            if module:IsA("ModuleScript") and (string.find(module.Name:lower(), "fishing") or string.find(module.Name:lower(), "controller")) then
+                local modSuccess, modResult = pcall(function()
+                    return require(module)
+                end)
+                if modSuccess and type(modResult) == "table" then
+                    if modResult.RequestChargeFishingRod and modResult.FishingRodStarted then
+                        module_upvr = modResult
+                        break
+                    end
+                end
+            end
+        end
+        
+        if not module_upvr then
+            local FishingController = ReplicatedStorage.Controllers:FindFirstChild("FishingController")
+            if FishingController then
+                module_upvr = require(FishingController)
+            end
+        end
+        
+        -- Get remote events/functions
+        FISHING_COMPLETED_REMOTE = Net_upvr:RemoteEvent("FishingCompleted")
+        RequestFishingMinigameStarted_Net = Net_upvr:RemoteFunction("RequestFishingMinigameStarted")
+        
+        -- Save original functions
+        if module_upvr then
+            originalFishingRodStarted = module_upvr.FishingRodStarted
+            originalSendFishingRequestToServer = module_upvr.SendFishingRequestToServer
+            originalRequestChargeFishingRod = module_upvr.RequestChargeFishingRod
+        end
+        
+        -- Initialize trove
+        BLATANT_MODE_TROVE = Trove_upvr.new()
+        
+        return true
+    end)
+    
+    if success then
+        Notify({Title = "Blatant Fishing", Content = "System initialized successfully", Duration = 3})
+        return true
+    else
+        Notify({Title = "Blatant Fishing Error", Content = "Failed to initialize: " .. tostring(result), Duration = 4})
+        return false
+    end
 end
 
 -- Fungsi yang menjalankan logika penyelesaian minigame secara instan (Blatant)
 local function AutoFishComplete(rodData, minigameData)
-    -- Blantant Mode: Delay reel (0 - 1.87)
-    local reelDelay = blatantReelDelay
-    if reelDelay > 0 then
-        task.wait(reelDelay)
-    end
-    
-    -- Fishing Complete: Langsung tembak RemoteEvent "FishingCompleted" ke server.
-    pcall(function()
-        FISHING_COMPLETED_REMOTE:FireServer() 
-    end)
-    
-    print("⚡ Blatant Mode: Minigame Bypassed. Fish Retrieved.")
+    -- Blantant Mode: Delay reel (0 - 1.87)
+    local reelDelay = blatantReelDelay
+    if reelDelay > 0 then
+        task.wait(reelDelay)
+    end
+    
+    -- Fishing Complete: Langsung tembak RemoteEvent "FishingCompleted" ke server.
+    pcall(function()
+        FISHING_COMPLETED_REMOTE:FireServer() 
+    end)
+    
+    print("⚡ Blatant Mode: Minigame Bypassed. Fish Retrieved.")
 
-    -- Delay Fishing Complete sebelum loop Fast Fishing kembali melempar
-    if blatantFishingDelay > 0 then
-        task.wait(blatantFishingDelay)
-    end
+    -- PERUBAHAN: Hapus delay di sini. Loop casting yang akan mengontrol delay.
+    -- if blatantFishingDelay > 0 then
+    --     task.wait(blatantFishingDelay)
+    -- end
 end
 
 -- Fungsi HOOK untuk menimpa 'FishingRodStarted'
 local function HookFishingRodStarted(rodData, minigameData)
-    if isBlatantActive then
-        -- Jika mode Blatant aktif, langsung selesaikan di thread terpisah
-        task.spawn(function()
-            AutoFishComplete(rodData, minigameData)
-        end)
-    else
-        -- Jika tidak aktif, jalankan fungsi asli
-        if originalFishingRodStarted then
-            originalFishingRodStarted(rodData, minigameData)
-        end
-    end
+    if isBlatantActive then
+        -- Jika mode Blatant aktif, langsung selesaikan di thread terpisah (Non-Blocking)
+        task.spawn(function()
+            AutoFishComplete(rodData, minigameData)
+        end)
+    else
+        -- Jika tidak aktif, jalankan fungsi asli
+        if originalFishingRodStarted then
+            originalFishingRodStarted(rodData, minigameData)
+        end
+    end
 end
 
 -- Fungsi untuk mendapatkan mouse position yang aman
 local function GetSafeMousePosition()
-    local UserInputService = game:GetService("UserInputService")
-    local CurrentCamera = workspace.CurrentCamera
-    
-    if UserInputService.MouseEnabled then
-        return UserInputService:GetMouseLocation()
-    else
-        local viewportSize = CurrentCamera.ViewportSize
-        return Vector2.new(viewportSize.X / 2, viewportSize.Y / 2)
-    end
+    local UserInputService = game:GetService("UserInputService")
+    local CurrentCamera = workspace.CurrentCamera
+    
+    if UserInputService.MouseEnabled then
+        return UserInputService:GetMouseLocation()
+    else
+        local viewportSize = CurrentCamera.ViewportSize
+        return Vector2.new(viewportSize.X / 2, viewportSize.Y / 2)
+    end
 end
 
 -- Approach 1: Menggunakan RequestChargeFishingRod dengan bypass
 local function BlatantCastMethod1()
-    local success, result = pcall(function()
-        -- Set konfirmasi untuk bypass user input
-        _G.confirmFishingInput = function() return true end
-        
-        local mousePos = GetSafeMousePosition()
-        local skipCharge = true
-        
-        -- Panggil RequestChargeFishingRod dengan parameter skip charge
-        local castResult = module_upvr:RequestChargeFishingRod(mousePos, nil)
-        
-        _G.confirmFishingInput = nil
-        return castResult
-    end)
-    
-    return success and result -- return success DAN result
+    local success, result = pcall(function()
+        -- Set konfirmasi untuk bypass user input
+        _G.confirmFishingInput = function() return true end
+        
+        local mousePos = GetSafeMousePosition()
+        local skipCharge = true
+        
+        -- Panggil RequestChargeFishingRod dengan parameter skip charge yang disuntikkan
+        local castResult = module_upvr:RequestChargeFishingRod(mousePos, nil, skipCharge) -- Tambahkan skipCharge
+        
+        _G.confirmFishingInput = nil
+        return castResult
+    end)
+    
+    return success and result -- return success DAN result
 end
 
--- Approach 2: Direct server call
+-- Approach 2: Direct server call (Dibiarkan untuk referensi)
 local function BlatantCastMethod2()
-    if not RequestFishingMinigameStarted_Net then
-        return false
-    end
-    
-    local success, result = pcall(function()
-        -- Get character position
-        local character = LocalPlayer.Character
-        if not character or not character:FindFirstChild("HumanoidRootPart") then
-            return false, "No character found"
-        end
-        
-        local throwPosition = character.HumanoidRootPart.Position + Vector3.new(0, -1, 10)
-        local power = 0.5
-        local castTime = workspace:GetServerTimeNow()
-        
-        local serverSuccess, serverResult = RequestFishingMinigameStarted_Net:InvokeServer(
-            throwPosition.Y,
-            power, 
-            castTime
-        )
-        
-        if serverSuccess then
-            -- Trigger FishingRodStarted manually
-            if module_upvr and module_upvr.FishingRodStarted then
-                module_upvr:FishingRodStarted(serverResult)
-            end
-            return true
-        else
-            return false, tostring(serverResult)
-        end
-    end)
-    
-    return success
+    if not RequestFishingMinigameStarted_Net then
+        return false
+    end
+    
+    local success, result = pcall(function()
+        -- Get character position
+        local character = LocalPlayer.Character
+        if not character or not character:FindFirstChild("HumanoidRootPart") then
+            return false, "No character found"
+        end
+        
+        local throwPosition = character.HumanoidRootPart.Position + Vector3.new(0, -1, 10)
+        local power = 0.5
+        local castTime = workspace:GetServerTimeNow()
+        
+        local serverSuccess, serverResult = RequestFishingMinigameStarted_Net:InvokeServer(
+            throwPosition.Y,
+            power, 
+            castTime
+        )
+        
+        if serverSuccess then
+            -- Trigger FishingRodStarted manually
+            if module_upvr and module_upvr.FishingRodStarted then
+                module_upvr:FishingRodStarted(serverResult)
+            end
+            return true
+        else
+            return false, tostring(serverResult)
+        end
+    end)
+    
+    return success
 end
 
--- Approach 3: Menggunakan SendFishingRequestToServer langsung
+-- Approach 3: Menggunakan SendFishingRequestToServer langsung (Dibiarkan untuk referensi)
 local function BlatantCastMethod3()
-    if not module_upvr or not module_upvr.SendFishingRequestToServer then
-        return false
-    end
-    
-    local success, result = pcall(function()
-        local mousePos = GetSafeMousePosition()
-        local power = 0.5
-        local skipCharge = true
-        
-        local sendSuccess, sendResult = module_upvr:SendFishingRequestToServer(mousePos, power, skipCharge)
-        return sendSuccess
-    end)
-    
-    return success
+    if not module_upvr or not module_upvr.SendFishingRequestToServer then
+        return false
+    end
+    
+    local success, result = pcall(function()
+        local mousePos = GetSafeMousePosition()
+        local power = 0.5
+        local skipCharge = true
+        
+        local sendSuccess, sendResult = module_upvr:SendFishingRequestToServer(mousePos, power, skipCharge)
+        return sendSuccess
+    end)
+    
+    return success
 end
 
--- Main blatant casting function yang mencoba method 1 dan 3
--- Main blatant casting function yang hanya menggunakan method 1
+-- Main blatant casting function (Menggunakan Method 1 untuk spam)
 local function BlatantCastFishingRod()
-    -- Coba method 1: RequestChargeFishingRod dengan bypass
-    local success = BlatantCastMethod1()
-    if success then
-        print("✅ Blatant Cast: Method 1 successful")
-        return true
-    end
-    
-    print("❌ Blatant Cast: Method 1 failed")
-    return false
+    local success = BlatantCastMethod1()
+    if success then
+        -- Casting berhasil, segera kembalikan 'true' agar loop bisa lempar lagi
+        print("✅ Blatant Cast: Method 1 (Spam Cast) successful")
+        return true
+    end
+    
+    print("❌ Blatant Cast: Method 1 failed")
+    return false
 end
+
 -- =============================================================================
--- PERBAIKAN UTAMA: BlatantFishingLoop yang menggunakan multiple approaches
+-- BLATANT FISHING LOOP (Pengontrol Kecepatan Spam)
 -- =============================================================================
 
 local function BlatantFishingLoop()
-    while isBlatantActive do
-        local castSuccess = BlatantCastFishingRod()
-        
-        if not castSuccess then
-            print("🔄 Retrying cast...")
-        end
+    while isBlatantActive do
+        local castSuccess = BlatantCastFishingRod()
+        
+        if not castSuccess then
+            print("🔄 Retrying cast...")
+        end
 
-        -- Delay sebelum cast berikutnya
-        task.wait(blatantFishingDelay)
-    end
+        -- Delay murni untuk mengontrol kecepatan spam cast (cooldown antar lemparan)
+        task.wait(blatantFishingDelay)
+    end
 end
 
 -- Hook untuk RequestChargeFishingRod
 local function HookRequestChargeFishingRod(arg1, arg2, arg3)
-    if isBlatantActive then
-        print("⚡ Blatant Mode: Fast casting via RequestChargeFishingRod")
-        
-        -- Di Blatant Mode, gunakan parameter untuk skip charging
-        local mousePos = arg1 or GetSafeMousePosition()
-        local skipCharge = true
-        
-        return originalRequestChargeFishingRod(mousePos, arg2, skipCharge)
-    else
-        return originalRequestChargeFishingRod(arg1, arg2, arg3)
-    end
+    if isBlatantActive then
+        print("⚡ Blatant Mode: Fast casting via RequestChargeFishingRod")
+        
+        -- Di Blatant Mode, gunakan parameter untuk skip charging
+        local mousePos = arg1 or GetSafeMousePosition()
+        local skipCharge = true
+        
+        return originalRequestChargeFishingRod(mousePos, arg2, skipCharge)
+    else
+        return originalRequestChargeFishingRod(arg1, arg2, arg3)
+    end
 end
 
 -- Hook untuk SendFishingRequestToServer
 local function HookSendFishingRequestToServer(mousePosition, power, skipCharge)
-    if isBlatantActive then
-        print("⚡ Blatant Mode: SendFishingRequestToServer with forced parameters")
-        return originalSendFishingRequestToServer(mousePosition, 0.5, true)
-    else
-        return originalSendFishingRequestToServer(mousePosition, power, skipCharge)
-    end
+    if isBlatantActive then
+        print("⚡ Blatant Mode: SendFishingRequestToServer with forced parameters")
+        return originalSendFishingRequestToServer(mousePosition, 0.5, true)
+    else
+        return originalSendFishingRequestToServer(mousePosition, power, skipCharge)
+    end
 end
 
 -- Fungsi untuk mengatur delay reel
 local function SetBlatantReelDelay(delay)
-    if type(delay) == "number" and delay >= 0 and delay <= 1.87 then
-        blatantReelDelay = delay
-        Notify({
-            Title = "Blatant Fishing", 
-            Content = string.format("Reel delay set to %.4f seconds", delay),
-            Duration = 3
-        })
-        return true
-    end
-    return false
+    if type(delay) == "number" and delay >= 0 and delay <= 1.87 then
+        blatantReelDelay = delay
+        Notify({
+            Title = "Blatant Fishing", 
+            Content = string.format("Reel delay set to %.4f seconds", delay),
+            Duration = 3
+        })
+        return true
+    end
+    return false
 end
 
 -- Fungsi untuk mengatur delay fishing
 local function SetBlatantFishingDelay(delay)
-    if type(delay) == "number" and delay >= 0 and delay <= 5 then
-        blatantFishingDelay = delay
-        Notify({
-            Title = "Blatant Fishing", 
-            Content = string.format("Fishing delay (loop) set to %.4f seconds", delay),
-            Duration = 3
-        })
-        return true
-    end
-    return false
+    if type(delay) == "number" and delay >= 0 and delay <= 5 then
+        blatantFishingDelay = delay
+        Notify({
+            Title = "Blatant Fishing", 
+            Content = string.format("Fishing delay (loop) set to %.4f seconds", delay),
+            Duration = 3
+        })
+        return true
+    end
+    return false
 end
 
 -- Fungsi publik untuk mengaktifkan/menonaktifkan Blatant Mode
 local function ToggleBlatantMode(enable)
-    if enable == isBlatantActive then return end
-    
-    if enable then
-        -- Initialize system if not already initialized
-        if not module_upvr or not FISHING_COMPLETED_REMOTE then
-            if not InitializeBlatantFishing() then
-                return false
-            end
-        end
-        
-        isBlatantActive = true
-        print("✅ Blantant Mode (Fast Fishing): ENABLED.")
-        
-        -- Terapkan Hook pada fungsi-fungsi fishing
-        if module_upvr then
-            if module_upvr.FishingRodStarted ~= HookFishingRodStarted then
-                module_upvr.FishingRodStarted = HookFishingRodStarted
-            end
-            
-            if module_upvr.RequestChargeFishingRod and module_upvr.RequestChargeFishingRod ~= HookRequestChargeFishingRod then
-                module_upvr.RequestChargeFishingRod = HookRequestChargeFishingRod
-            end
-            
-            if module_upvr.SendFishingRequestToServer and module_upvr.SendFishingRequestToServer ~= HookSendFishingRequestToServer then
-                module_upvr.SendFishingRequestToServer = HookSendFishingRequestToServer
-            end
-            
-            -- Tambahkan fungsi pembersihan ke Trove
-            if BLATANT_MODE_TROVE then
-                BLATANT_MODE_TROVE:Add(function() 
-                    if module_upvr then
-                        if originalFishingRodStarted then
-                            module_upvr.FishingRodStarted = originalFishingRodStarted 
-                        end
-                        if originalRequestChargeFishingRod then
-                            module_upvr.RequestChargeFishingRod = originalRequestChargeFishingRod
-                        end
-                        if originalSendFishingRequestToServer then
-                            module_upvr.SendFishingRequestToServer = originalSendFishingRequestToServer
-                        end
-                    end
-                end)
-            end
-        end
-        
-        -- Jalankan loop Fast Fishing
-        if BLATANT_MODE_TROVE then
-            BLATANT_MODE_TROVE:Add(task.spawn(BlatantFishingLoop))
-        end
-        
-        Notify({Title = "⚡ Blatant Fishing", Content = "Fast fishing mode activated - Instant casting and bypassing minigame", Duration = 3})
-        
-    else
-        isBlatantActive = false
-        print("❌ Blantant Mode (Fast Fishing): DISABLED. Cleaning up...")
-        
-        -- Cleanup
-        if BLATANT_MODE_TROVE then
-            BLATANT_MODE_TROVE:Clean()
-        end
-        
-        -- Restore original functions
-        if module_upvr then
-            if originalFishingRodStarted then
-                module_upvr.FishingRodStarted = originalFishingRodStarted
-            end
-            if originalRequestChargeFishingRod then
-                module_upvr.RequestChargeFishingRod = originalRequestChargeFishingRod
-            end
-            if originalSendFishingRequestToServer then
-                module_upvr.SendFishingRequestToServer = originalSendFishingRequestToServer
-            end
-        end
-        
-        Notify({Title = "Blatant Fishing", Content = "Fast fishing mode deactivated", Duration = 3})
-    end
-    
-    return true
+    if enable == isBlatantActive then return end
+    
+    if enable then
+        -- Initialize system if not already initialized
+        if not module_upvr or not FISHING_COMPLETED_REMOTE then
+            if not InitializeBlatantFishing() then
+                return false
+            end
+        end
+        
+        isBlatantActive = true
+        print("✅ Blantant Mode (Fast Fishing): ENABLED.")
+        
+        -- Terapkan Hook pada fungsi-fungsi fishing
+        if module_upvr then
+            if module_upvr.FishingRodStarted ~= HookFishingRodStarted then
+                module_upvr.FishingRodStarted = HookFishingRodStarted
+            end
+            
+            if module_upvr.RequestChargeFishingRod and module_upvr.RequestChargeFishingRod ~= HookRequestChargeFishingRod then
+                module_upvr.RequestChargeFishingRod = HookRequestChargeFishingRod
+            end
+            
+            if module_upvr.SendFishingRequestToServer and module_upvr.SendFishingRequestToServer ~= HookSendFishingRequestToServer then
+                module_upvr.SendFishingRequestToServer = HookSendFishingRequestToServer
+            end
+            
+            -- Tambahkan fungsi pembersihan ke Trove
+            if BLATANT_MODE_TROVE then
+                BLATANT_MODE_TROVE:Add(function() 
+                    if module_upvr then
+                        if originalFishingRodStarted then
+                            module_upvr.FishingRodStarted = originalFishingRodStarted 
+                        end
+                        if originalRequestChargeFishingRod then
+                            module_upvr.RequestChargeFishingRod = originalRequestChargeFishingRod
+                        end
+                        if originalSendFishingRequestToServer then
+                            module_upvr.SendFishingRequestToServer = originalSendFishingRequestToServer
+                        end
+                    end
+                end)
+            end
+        end
+        
+        -- Jalankan loop Fast Fishing (Spam)
+        if BLATANT_MODE_TROVE then
+            BLATANT_MODE_TROVE:Add(task.spawn(BlatantFishingLoop))
+        end
+        
+        Notify({Title = "⚡ Blatant Fishing", Content = "Fast fishing mode activated - Instant spam casting.", Duration = 3})
+        
+    else
+        isBlatantActive = false
+        print("❌ Blantant Mode (Fast Fishing): DISABLED. Cleaning up...")
+        
+        -- Cleanup
+        if BLATANT_MODE_TROVE then
+            BLATANT_MODE_TROVE:Clean()
+        end
+        
+        -- Restore original functions
+        if module_upvr then
+            if originalFishingRodStarted then
+                module_upvr.FishingRodStarted = originalFishingRodStarted
+            end
+            if originalRequestChargeFishingRod then
+                module_upvr.RequestChargeFishingRod = originalRequestChargeFishingRod
+            end
+            if originalSendFishingRequestToServer then
+                module_upvr.SendFishingRequestToServer = originalSendFishingRequestToServer
+            end
+        end
+        
+        Notify({Title = "Blatant Fishing", Content = "Fast fishing mode deactivated", Duration = 3})
+    end
+    
+    return true
 end
 
 -- Manual fishing function untuk testing
 local function ManualBlatantFish()
-    if not isBlatantActive then
-        Notify({Title = "Blatant Fishing", Content = "Please enable Blatant Mode first", Duration = 3})
-        return
-    end
-    
-    pcall(function()
-        local success = BlatantCastFishingRod()
-        if success then
-            Notify({Title = "⚡ Manual Cast", Content = "Casting fishing rod instantly...", Duration = 2})
-        else
-            Notify({Title = "❌ Manual Cast Failed", Content = "Failed to cast fishing rod", Duration = 2})
-        end
-    end)
+    if not isBlatantActive then
+        Notify({Title = "Blatant Fishing", Content = "Please enable Blatant Mode first", Duration = 3})
+        return
+    end
+    
+    pcall(function()
+        local success = BlatantCastFishingRod()
+        if success then
+            Notify({Title = "⚡ Manual Cast", Content = "Casting fishing rod instantly...", Duration = 2})
+        else
+            Notify({Title = "❌ Manual Cast Failed", Content = "Failed to cast fishing rod", Duration = 2})
+        end
+    end)
 end
-
 -- Network Communication untuk Auto Fishing biasa
 local function GetAutoFishRemote()
     local ok, NetModule = pcall(function()
