@@ -104,7 +104,7 @@ local WindUI = loadstring(game:HttpGet("https://raw.githubusercontent.com/Footag
 task.spawn(function()
     task.wait(1) -- Tunggu sebentar agar UI siap
     WindUI:Popup({
-        Title = "KONTOLLLS?!",
+        Title = "APASIHH?!",
         Icon = "fish",
         Content = "Thank you for using Anggazyy Hub - Fish It Automation\n\nScript ini 100% Gratis dan tidak diperjualbelikan",
         Buttons = {
@@ -287,10 +287,77 @@ local function InitializeBlatantFishing()
 end
 
 -- =============================================================================
--- INSTANT CAST SYSTEM - TANPA ANIMASI CHARGE
+-- BLATANT FISHING SYSTEM - FIXED INSTANT CAST VERSION
 -- =============================================================================
 
--- Fungsi untuk mendapatkan mouse position yang aman
+-- Variabel untuk tracking status
+local isBlatantInitialized = false
+local blatantLoopRunning = false
+
+local function InitializeBlatantFishing()
+    if isBlatantInitialized then return true end
+    
+    local success, result = pcall(function()
+        -- Load required modules for Blatant Fishing
+        Net_upvr = require(ReplicatedStorage.Packages.Net)
+        Trove_upvr = require(ReplicatedStorage.Packages.Trove)
+        Constants_upvr = require(ReplicatedStorage.Shared.Constants)
+        
+        -- Get fishing module
+        for _, module in pairs(ReplicatedStorage:GetDescendants()) do
+            if module:IsA("ModuleScript") and (string.find(module.Name:lower(), "fishing") or string.find(module.Name:lower(), "controller")) then
+                local modSuccess, modResult = pcall(function()
+                    return require(module)
+                end)
+                if modSuccess and type(modResult) == "table" then
+                    if modResult.RequestChargeFishingRod and modResult.FishingRodStarted then
+                        module_upvr = modResult
+                        break
+                    end
+                end
+            end
+        end
+        
+        if not module_upvr then
+            local FishingController = ReplicatedStorage.Controllers:FindFirstChild("FishingController")
+            if FishingController then
+                module_upvr = require(FishingController)
+            end
+        end
+        
+        if not module_upvr then
+            return false, "Fishing module not found"
+        end
+        
+        -- Get remote events/functions
+        FISHING_COMPLETED_REMOTE = Net_upvr:RemoteEvent("FishingCompleted")
+        RequestFishingMinigameStarted_Net = Net_upvr:RemoteFunction("RequestFishingMinigameStarted")
+        
+        -- Save original functions
+        originalFishingRodStarted = module_upvr.FishingRodStarted
+        originalSendFishingRequestToServer = module_upvr.SendFishingRequestToServer
+        originalRequestChargeFishingRod = module_upvr.RequestChargeFishingRod
+        
+        -- Initialize trove
+        BLATANT_MODE_TROVE = Trove_upvr.new()
+        
+        isBlatantInitialized = true
+        return true
+    end)
+    
+    if success then
+        Notify({Title = "Blatant Fishing", Content = "System initialized successfully", Duration = 3})
+        return true
+    else
+        Notify({Title = "Blatant Fishing Error", Content = "Failed to initialize: " .. tostring(result), Duration = 4})
+        return false
+    end
+end
+
+-- =============================================================================
+-- INSTANT CAST CORE FUNCTIONS
+-- =============================================================================
+
 local function GetSafeMousePosition()
     local UserInputService = game:GetService("UserInputService")
     local CurrentCamera = workspace.CurrentCamera
@@ -303,7 +370,7 @@ local function GetSafeMousePosition()
     end
 end
 
--- Approach 1: Direct server call untuk instant cast
+-- Method 1: Direct server call - PALING EFEKTIF
 local function InstantCastMethod1()
     local success, result = pcall(function()
         -- Get character position
@@ -317,6 +384,8 @@ local function InstantCastMethod1()
         local power = 0.5  -- Power default
         local castTime = workspace:GetServerTimeNow()
         
+        print("🎯 Attempting direct server cast...")
+        
         -- Direct invoke ke server tanpa proses charge client
         local serverSuccess, serverResult = RequestFishingMinigameStarted_Net:InvokeServer(
             throwPosition.Y,  -- Y position untuk raycast
@@ -325,82 +394,120 @@ local function InstantCastMethod1()
         )
         
         if serverSuccess then
+            print("✅ Direct server cast SUCCESS")
             -- Trigger FishingRodStarted manually untuk memulai fishing process
             if module_upvr and module_upvr.FishingRodStarted then
                 module_upvr:FishingRodStarted(serverResult)
             end
             return true
         else
+            print("❌ Direct server cast failed:", tostring(serverResult))
             return false, tostring(serverResult)
         end
     end)
     
+    if not success then
+        print("❌ Direct cast error:", tostring(result))
+    end
+    
     return success
 end
 
--- Approach 2: Bypass charge system dengan parameter force
+-- Method 2: Bypass charge system
 local function InstantCastMethod2()
     local success, result = pcall(function()
         -- Bypass semua input confirmation
-        _G.confirmFishingInput = function() return true end
+        _G.confirmFishingInput = function() 
+            print("✅ Bypassing user input confirmation")
+            return true 
+        end
         
         local mousePos = GetSafeMousePosition()
+        
+        print("🎯 Attempting bypass charge cast...")
         
         -- Paksa skip charge dengan parameter ketiga = true
         local castResult = module_upvr:RequestChargeFishingRod(mousePos, nil, true)
         
         _G.confirmFishingInput = nil
+        
+        if castResult then
+            print("✅ Bypass charge cast SUCCESS")
+        else
+            print("❌ Bypass charge cast failed")
+        end
+        
         return castResult
     end)
+    
+    if not success then
+        print("❌ Bypass cast error:", tostring(result))
+    end
     
     return success
 end
 
--- Main instant casting function
+-- Main instant casting function dengan fallback
 local function InstantCastFishingRod()
-    -- Coba method direct server call dulu
+    print("🎣 ATTEMPTING INSTANT CAST...")
+    
+    -- Cek apakah fishing rod equipped
+    if not module_upvr then
+        print("❌ Fishing module not loaded")
+        return false
+    end
+    
+    -- Cek cooldown
+    if module_upvr:OnCooldown() then
+        print("⏳ On cooldown, waiting...")
+        return false
+    end
+    
+    -- Coba method direct server call dulu (paling reliable)
     local success = InstantCastMethod1()
     if success then
-        print("✅ INSTANT CAST: Direct server method successful")
         return true
     end
+    
+    -- Tunggu sebentar sebelum fallback
+    task.wait(0.05)
     
     -- Fallback ke method bypass charge
     success = InstantCastMethod2()
-    if success then
-        print("✅ INSTANT CAST: Bypass charge method successful")
-        return true
-    end
-    
-    print("❌ INSTANT CAST: All methods failed")
-    return false
+    return success
 end
 
 -- =============================================================================
--- INSTANT FISHING COMPLETION SYSTEM
+-- INSTANT COMPLETION SYSTEM
 -- =============================================================================
 
--- Fungsi yang menjalankan logika penyelesaian minigame secara instan
 local function InstantFishComplete(rodData, minigameData)
+    print("⚡ INSTANT COMPLETION: Starting...")
+    
     -- Tunggu delay reel yang sangat kecil
     if blatantReelDelay > 0 then
+        print("⏳ Waiting reel delay:", blatantReelDelay)
         task.wait(blatantReelDelay)
     end
     
     -- Langsung complete fishing
-    pcall(function()
+    local success = pcall(function()
         FISHING_COMPLETED_REMOTE:FireServer() 
     end)
     
-    print("⚡ INSTANT MODE: Fishing completed in " .. blatantReelDelay .. " seconds")
+    if success then
+        print("✅ INSTANT COMPLETION: Fishing completed!")
+    else
+        print("❌ INSTANT COMPLETION: Failed to complete fishing")
+    end
 end
 
 -- Hook untuk FishingRodStarted - INSTANT VERSION
 local function HookFishingRodStarted_Instant(rodData, minigameData)
     if isBlatantActive then
-        print("⚡ INSTANT MODE: FishingRodStarted triggered - Auto completing...")
+        print("⚡ HOOK: FishingRodStarted triggered - Auto completing...")
         
-        -- Langsung complete fishing tanpa blocking
+        -- Langsung complete fishing tanpa blocking loop utama
         task.spawn(function()
             InstantFishComplete(rodData, minigameData)
         end)
@@ -415,7 +522,7 @@ end
 -- Hook untuk RequestChargeFishingRod - INSTANT VERSION
 local function HookRequestChargeFishingRod_Instant(arg1, arg2, arg3)
     if isBlatantActive then
-        print("⚡ INSTANT MODE: Bypassing charge animation")
+        print("⚡ HOOK: RequestChargeFishingRod - Bypassing charge animation")
         
         -- Force skip charge dengan parameter true
         local mousePos = arg1 or GetSafeMousePosition()
@@ -427,28 +534,171 @@ local function HookRequestChargeFishingRod_Instant(arg1, arg2, arg3)
 end
 
 -- =============================================================================
--- INSTANT FISHING LOOP - SPAM CASTING
+-- ROBUST FISHING LOOP - DENGAN ERROR HANDLING
 -- =============================================================================
 
-local function InstantFishingLoop()
-    while isBlatantActive do
-        -- Instant cast tanpa delay apapun
-        local castSuccess = InstantCastFishingRod()
-        
-        if not castSuccess then
-            print("🔄 INSTANT CAST: Retrying...")
-        end
-
-        -- Delay sangat kecil untuk spam maksimal
-        task.wait(blatantFishingDelay)
+local function RobustFishingLoop()
+    if blatantLoopRunning then
+        print("⚠️ Fishing loop already running")
+        return
     end
+    
+    blatantLoopRunning = true
+    local castCount = 0
+    
+    print("🚀 STARTING ROBUST FISHING LOOP...")
+    
+    while isBlatantActive do
+        local success, error = pcall(function()
+            -- Instant cast tanpa delay apapun
+            local castSuccess = InstantCastFishingRod()
+            
+            if castSuccess then
+                castCount = castCount + 1
+                print("🎯 CAST SUCCESS #" .. castCount)
+            else
+                print("🔄 CAST FAILED - Retrying...")
+            end
+
+            -- Delay sangat kecil untuk spam maksimal
+            if blatantFishingDelay > 0 then
+                task.wait(blatantFishingDelay)
+            end
+        end)
+        
+        if not success then
+            print("❌ LOOP ERROR:", error)
+            -- Tunggu sebentar sebelum retry jika ada error
+            task.wait(0.1)
+        end
+        
+        -- Safety check
+        if not isBlatantActive then break end
+    end
+    
+    blatantLoopRunning = false
+    print("🛑 FISHING LOOP STOPPED. Total casts:", castCount)
 end
 
 -- =============================================================================
--- BLATANT FISHING CONFIGURATION FUNCTIONS
+-- IMPROVED TOGGLE SYSTEM - DENGAN BETTER ERROR HANDLING
 -- =============================================================================
 
--- Fungsi untuk mengatur delay reel
+local function ToggleBlatantMode(enable)
+    if enable == isBlatantActive then 
+        print("ℹ️ Blatant mode already", enable and "enabled" or "disabled")
+        return 
+    end
+    
+    if enable then
+        print("🔄 ENABLING BLATANT MODE...")
+        
+        -- Initialize system if not already initialized
+        if not isBlatantInitialized then
+            print("🔧 Initializing blatant system...")
+            if not InitializeBlatantFishing() then
+                Notify({Title = "❌ Error", Content = "Failed to initialize fishing system", Duration = 3})
+                return false
+            end
+        end
+        
+        isBlatantActive = true
+        print("✅ BLATANT MODE: ENABLED")
+        
+        -- Terapkan Hook pada fungsi-fungsi fishing
+        if module_upvr then
+            print("🔗 Applying hooks...")
+            
+            -- Hook FishingRodStarted
+            if module_upvr.FishingRodStarted ~= HookFishingRodStarted_Instant then
+                module_upvr.FishingRodStarted = HookFishingRodStarted_Instant
+                print("✅ Hooked FishingRodStarted")
+            end
+            
+            -- Hook RequestChargeFishingRod
+            if module_upvr.RequestChargeFishingRod and module_upvr.RequestChargeFishingRod ~= HookRequestChargeFishingRod_Instant then
+                module_upvr.RequestChargeFishingRod = HookRequestChargeFishingRod_Instant
+                print("✅ Hooked RequestChargeFishingRod")
+            end
+            
+            -- Tambahkan fungsi pembersihan ke Trove
+            if BLATANT_MODE_TROVE then
+                BLATANT_MODE_TROVE:Add(function() 
+                    print("🧹 Cleaning up hooks...")
+                    if module_upvr then
+                        if originalFishingRodStarted then
+                            module_upvr.FishingRodStarted = originalFishingRodStarted 
+                        end
+                        if originalRequestChargeFishingRod then
+                            module_upvr.RequestChargeFishingRod = originalRequestChargeFishingRod
+                        end
+                    end
+                end)
+            end
+        else
+            print("❌ Module_upvr not found!")
+            Notify({Title = "❌ Error", Content = "Fishing module not found", Duration = 3})
+            return false
+        end
+        
+        -- Jalankan loop INSTANT Fishing
+        if BLATANT_MODE_TROVE then
+            BLATANT_MODE_TROVE:Add(task.spawn(RobustFishingLoop))
+            print("🔄 Starting fishing loop...")
+        end
+        
+        Notify({Title = "⚡ INSTANT CAST", Content = "Instant fishing activated!", Duration = 3})
+        
+    else
+        print("🔄 DISABLING BLATANT MODE...")
+        isBlatantActive = false
+        
+        -- Cleanup
+        if BLATANT_MODE_TROVE then
+            BLATANT_MODE_TROVE:Clean()
+            print("✅ Cleaned up trove")
+        end
+        
+        -- Restore original functions
+        if module_upvr then
+            if originalFishingRodStarted then
+                module_upvr.FishingRodStarted = originalFishingRodStarted
+            end
+            if originalRequestChargeFishingRod then
+                module_upvr.RequestChargeFishingRod = originalRequestChargeFishingRod
+            end
+            print("✅ Restored original functions")
+        end
+        
+        Notify({Title = "Blatant Fishing", Content = "Instant cast mode deactivated", Duration = 3})
+        print("✅ BLATANT MODE: DISABLED")
+    end
+    
+    return true
+end
+
+-- Manual fishing function untuk testing
+local function ManualBlatantFish()
+    if not isBlatantActive then
+        Notify({Title = "Blatant Fishing", Content = "Please enable Blatant Mode first", Duration = 3})
+        return
+    end
+    
+    print("🎯 MANUAL CAST ATTEMPT...")
+    pcall(function()
+        local success = InstantCastFishingRod()
+        if success then
+            Notify({Title = "⚡ Manual Cast", Content = "Casting fishing rod instantly...", Duration = 2})
+        else
+            Notify({Title = "❌ Manual Cast Failed", Content = "Failed to cast fishing rod", Duration = 2})
+        end
+    end)
+end
+
+-- =============================================================================
+-- CONFIGURATION FUNCTIONS
+-- =============================================================================
+
 local function SetBlatantReelDelay(delay)
     if type(delay) == "number" and delay >= 0 and delay <= 1.87 then
         blatantReelDelay = delay
@@ -462,7 +712,6 @@ local function SetBlatantReelDelay(delay)
     return false
 end
 
--- Fungsi untuk mengatur delay fishing
 local function SetBlatantFishingDelay(delay)
     if type(delay) == "number" and delay >= 0 and delay <= 5 then
         blatantFishingDelay = delay
@@ -474,98 +723,6 @@ local function SetBlatantFishingDelay(delay)
         return true
     end
     return false
-end
-
--- =============================================================================
--- TOGGLE BLATANT MODE - INSTANT CAST VERSION
--- =============================================================================
-
-local function ToggleBlatantMode(enable)
-    if enable == isBlatantActive then return end
-    
-    if enable then
-        -- Initialize system if not already initialized
-        if not module_upvr or not FISHING_COMPLETED_REMOTE then
-            if not InitializeBlatantFishing() then
-                return false
-            end
-        end
-        
-        isBlatantActive = true
-        print("✅ INSTANT CAST MODE: ENABLED - No charge animation!")
-        
-        -- Terapkan Hook pada fungsi-fungsi fishing
-        if module_upvr then
-            if module_upvr.FishingRodStarted ~= HookFishingRodStarted_Instant then
-                module_upvr.FishingRodStarted = HookFishingRodStarted_Instant
-            end
-            
-            if module_upvr.RequestChargeFishingRod and module_upvr.RequestChargeFishingRod ~= HookRequestChargeFishingRod_Instant then
-                module_upvr.RequestChargeFishingRod = HookRequestChargeFishingRod_Instant
-            end
-            
-            -- Tambahkan fungsi pembersihan ke Trove
-            if BLATANT_MODE_TROVE then
-                BLATANT_MODE_TROVE:Add(function() 
-                    if module_upvr then
-                        if originalFishingRodStarted then
-                            module_upvr.FishingRodStarted = originalFishingRodStarted 
-                        end
-                        if originalRequestChargeFishingRod then
-                            module_upvr.RequestChargeFishingRod = originalRequestChargeFishingRod
-                        end
-                    end
-                end)
-            end
-        end
-        
-        -- Jalankan loop INSTANT Fishing
-        if BLATANT_MODE_TROVE then
-            BLATANT_MODE_TROVE:Add(task.spawn(InstantFishingLoop))
-        end
-        
-        Notify({Title = "⚡ INSTANT CAST", Content = "Instant fishing activated - No charge animation!", Duration = 3})
-        
-    else
-        isBlatantActive = false
-        print("❌ INSTANT CAST MODE: DISABLED")
-        
-        -- Cleanup
-        if BLATANT_MODE_TROVE then
-            BLATANT_MODE_TROVE:Clean()
-        end
-        
-        -- Restore original functions
-        if module_upvr then
-            if originalFishingRodStarted then
-                module_upvr.FishingRodStarted = originalFishingRodStarted
-            end
-            if originalRequestChargeFishingRod then
-                module_upvr.RequestChargeFishingRod = originalRequestChargeFishingRod
-            end
-        end
-        
-        Notify({Title = "Blatant Fishing", Content = "Instant cast mode deactivated", Duration = 3})
-    end
-    
-    return true
-end
-
--- Manual fishing function untuk testing
-local function ManualBlatantFish()
-    if not isBlatantActive then
-        Notify({Title = "Blatant Fishing", Content = "Please enable Blatant Mode first", Duration = 3})
-        return
-    end
-    
-    pcall(function()
-        local success = InstantCastFishingRod()
-        if success then
-            Notify({Title = "⚡ Manual Instant Cast", Content = "Casting fishing rod instantly...", Duration = 2})
-        else
-            Notify({Title = "❌ Manual Cast Failed", Content = "Failed to cast fishing rod", Duration = 2})
-        end
-    end)
 end
 
 -- Network Communication untuk Auto Fishing biasa
@@ -1555,7 +1712,7 @@ AutoTab:Toggle({
 
 AutoTab:Space()
 
--- Blatant Fishing Section - UPDATED
+-- Blatant Fishing Section - IMPROVED
 AutoTab:Section({
     Title = "⚡ INSTANT CAST Fishing",
     TextSize = 20,
@@ -1568,7 +1725,11 @@ AutoTab:Toggle({
     Flag = "BlatantModeToggle",
     Default = false,
     Callback = function(state)
-        ToggleBlatantMode(state)
+        local success = ToggleBlatantMode(state)
+        if not success then
+            -- Reset toggle state jika gagal
+            AutoTab:GetElement("BlatantModeToggle"):Set(false)
+        end
     end
 })
 
@@ -1603,10 +1764,13 @@ AutoTab:Slider({
 })
 
 AutoTab:Button({
-    Title = "Initialize Instant System",
+    Title = "Initialize System",
     Icon = "zap",
     Callback = function()
-        InitializeBlatantFishing()
+        local success = InitializeBlatantFishing()
+        if success then
+            Notify({Title = "✅ Success", Content = "System initialized!", Duration = 2})
+        end
     end
 })
 
