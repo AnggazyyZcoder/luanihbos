@@ -300,6 +300,11 @@ local function AutoFishComplete(rodData, minigameData)
     end)
     
     print("⚡ Blatant Mode: Minigame Bypassed. Fish Retrieved.")
+
+    -- PERUBAHAN: Hapus delay di sini. Loop casting yang akan mengontrol delay.
+    -- if blatantFishingDelay > 0 then
+    --     task.wait(blatantFishingDelay)
+    -- end
 end
 
 -- Fungsi HOOK untuk menimpa 'FishingRodStarted'
@@ -330,7 +335,7 @@ local function GetSafeMousePosition()
     end
 end
 
--- Approach 1: Menggunakan RequestChargeFishingRod dengan bypass - UPDATED
+-- Approach 1: Menggunakan RequestChargeFishingRod dengan bypass
 local function BlatantCastMethod1()
     local success, result = pcall(function()
         -- Set konfirmasi untuk bypass user input
@@ -404,7 +409,7 @@ local function BlatantCastMethod3()
     return success
 end
 
--- Main blatant casting function (Menggunakan Method 1 untuk spam) - UPDATED
+-- Main blatant casting function (Menggunakan Method 1 untuk spam)
 local function BlatantCastFishingRod()
     local success = BlatantCastMethod1()
     if success then
@@ -413,19 +418,12 @@ local function BlatantCastFishingRod()
         return true
     end
     
-    -- Jika method 1 gagal, coba method lain sebagai fallback
-    success = BlatantCastMethod2()
-    if success then
-        print("✅ Blatant Cast: Method 2 successful")
-        return true
-    end
-    
-    print("❌ Blatant Cast: All methods failed")
+    print("❌ Blatant Cast: Method 1 failed")
     return false
 end
 
 -- =============================================================================
--- BLATANT FISHING LOOP (Pengontrol Kecepatan Spam) - UPDATED
+-- BLATANT FISHING LOOP (Pengontrol Kecepatan Spam)
 -- =============================================================================
 
 local function BlatantFishingLoop()
@@ -434,15 +432,9 @@ local function BlatantFishingLoop()
         
         if not castSuccess then
             print("🔄 Retrying cast...")
-            -- Jika gagal, tunggu sedikit lebih lama sebelum retry
-            task.wait(0.5)
-        else
-            -- PERUBAHAN PENTING: Tidak ada delay tambahan di sini
-            -- Hanya menggunakan blatantFishingDelay untuk mengontrol kecepatan spam
         end
 
         -- Delay murni untuk mengontrol kecepatan spam cast (cooldown antar lemparan)
-        -- Nilai bisa diatur sangat rendah (0.001) untuk spam maksimal
         task.wait(blatantFishingDelay)
     end
 end
@@ -2187,3 +2179,7 @@ Notify({
     Content = "WindUI System initialized successfully with UPDATED Blatant Fishing",
     Duration = 4
 })
+
+--//////////////////////////////////////////////////////////////////////////////////
+-- WindUI System Initialization Complete
+--//////////////////////////////////////////////////////////////////////////////////
