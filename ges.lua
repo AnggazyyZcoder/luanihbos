@@ -88,7 +88,7 @@ local Constants_upvr = nil
 
 -- Blatant Fishing Configuration
 local blatantReelDelay = 0.5  -- Default delay reel
-local blatantFishingDelay = 0.1  -- PERUBAHAN: Delay fishing di set rendah untuk SPAM CAST
+local blatantFishingDelay = 0.5  -- PERUBAHAN: Delay fishing di set rendah untuk SPAM CAST
 
 -- UI Configuration
 local COLOR_ENABLED = Color3.fromRGB(76, 175, 80)  -- Green
@@ -105,7 +105,7 @@ local WindUI = loadstring(game:HttpGet("https://raw.githubusercontent.com/Footag
 task.spawn(function()
     task.wait(1) -- Tunggu sebentar agar UI siap
     WindUI:Popup({
-        Title = "KONTOLLLS?!",
+        Title = "APDTE KINGGGGGGGG!",
         Icon = "fish",
         Content = "Thank you for using Anggazyy Hub - Fish It Automation\n\nScript ini 100% Gratis dan tidak diperjualbelikan",
         Buttons = {
