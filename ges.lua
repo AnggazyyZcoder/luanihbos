@@ -1,3 +1,4 @@
+
 -- CONFIG: ubah sesuai kebutuhan
 local AUTO_FISH_REMOTE_NAME = "UpdateAutoFishingState"
 local NET_PACKAGES_FOLDER = "Packages"
@@ -11,10 +12,8 @@ local RunService = game:GetService("RunService")
 local Lighting = game:GetService("Lighting")
 local UserGameSettings = UserSettings():GetService("UserGameSettings")
 local LocalPlayer = Players.LocalPlayer
-local UserInputService = game:GetService("UserInputService")
-local Workspace = game:GetService("Workspace")
 
--- Import required modules dengan error handling
+-- Import required modules
 local success, Signal = pcall(require, ReplicatedStorage.Packages.Signal)
 local success2, Trove = pcall(require, ReplicatedStorage.Packages.Trove)
 local success3, Net = pcall(require, ReplicatedStorage.Packages.Net)
@@ -89,7 +88,7 @@ local Constants_upvr = nil
 
 -- Blatant Fishing Configuration
 local blatantReelDelay = 0.5  -- Default delay reel
-local blatantFishingDelay = 0.1  -- PERUBAHAN: Delay fishing di set rendah untuk SPAM CAST
+local blatantFishingDelay = 0.5  -- PERUBAHAN: Delay fishing di set rendah untuk SPAM CAST
 
 -- UI Configuration
 local COLOR_ENABLED = Color3.fromRGB(76, 175, 80)  -- Green
@@ -101,26 +100,12 @@ local COLOR_SECONDARY = Color3.fromRGB(30, 30, 46)  -- Dark
 local WindUI = loadstring(game:HttpGet("https://raw.githubusercontent.com/Footagesus/WindUI/refs/heads/main/dist/main.lua"))()
 
 -- =============================================================================
--- NOTIFICATION SYSTEM
--- =============================================================================
-local function Notify(opts)
-    pcall(function()
-        WindUI:Notify({
-            Title = opts.Title or "Notification",
-            Content = opts.Content or "",
-            Duration = opts.Duration or 3,
-            Icon = opts.Icon or "info"
-        })
-    end)
-end
-
--- =============================================================================
 -- WELCOME POPUP - Tampilkan saat pertama kali execute script
 -- =============================================================================
 task.spawn(function()
     task.wait(1) -- Tunggu sebentar agar UI siap
     WindUI:Popup({
-        Title = "WHERJEJJEE?!",
+        Title = "APDTE KINGGGGGGGG!",
         Icon = "fish",
         Content = "Thank you for using Anggazyy Hub - Fish It Automation\n\nScript ini 100% Gratis dan tidak diperjualbelikan",
         Buttons = {
@@ -141,7 +126,7 @@ end)
 local antiAFKEnabled = false
 
 -- 🛡️ Anti Kick + Auto Reconnect Full System
-local function AntiKickReconnect()
+function AntiKickReconnect()
     -- Pastikan hanya aktif sekali
     if getgenv().AntiKick_Started then return end
     getgenv().AntiKick_Started = true
@@ -210,862 +195,44 @@ local function ToggleAntiAFK(state)
     end
 end
 
--- =============================================================================
--- DRONE CAMERA SYSTEM - Mobile Compatible Version
--- =============================================================================
-
--- Drone Camera Variables
-local droneCameraEnabled = false
-local droneCamera = nil
-local droneBodyGyro = nil
-local droneBodyVelocity = nil
-local droneConnection = nil
-local originalCamera = nil
-local droneGui = nil
-local droneControlsGui = nil
-local mobileControlsGui = nil
-local touchInput = nil
-local virtualJoystick = nil
-
--- Check if running on mobile
-local IS_MOBILE = (UserInputService.TouchEnabled and not UserInputService.KeyboardEnabled)
-
--- Drone Configuration
-local DRONE_CONFIG = {
-    MoveSpeed = 25,
-    BoostSpeed = 50,
-    RotationSpeed = 2,
-    MouseSensitivity = 0.5,
-    TouchSensitivity = 2.0,
-    MaxSpeed = 100,
-    Acceleration = 2,
-    Deceleration = 4
-}
-
--- Current drone state
-local droneState = {
-    Velocity = Vector3.new(0, 0, 0),
-    IsBoosting = false,
-    CurrentSpeed = DRONE_CONFIG.MoveSpeed,
-    MobileMoveInput = Vector2.new(0, 0),
-    MobileLookInput = Vector2.new(0, 0)
-}
-
--- Input states
-local inputStates = {
-    Forward = false,
-    Backward = false,
-    Left = false,
-    Right = false,
-    Up = false,
-    Down = false
-}
-
--- Mobile touch states
-local mobileTouchStates = {
-    JoystickActive = false,
-    LookActive = false,
-    JoystickPosition = Vector2.new(0, 0),
-    LookPosition = Vector2.new(0, 0)
-}
-
--- Function to create drone camera
-local function CreateDroneCamera()
-    -- Save original camera
-    originalCamera = workspace.CurrentCamera
-    
-    -- Create drone part
-    local drone = Instance.new("Part")
-    drone.Name = "AnggazyyDroneCamera"
-    drone.Anchored = false
-    drone.CanCollide = false
-    drone.Massless = true
-    drone.Size = Vector3.new(2, 1, 3)
-    drone.Transparency = 0.8
-    drone.Material = Enum.Material.Neon
-    drone.BrickColor = BrickColor.new("Bright blue")
-    drone.Parent = workspace
-    
-    -- Position drone at player's position
-    local character = LocalPlayer.Character
-    if character and character:FindFirstChild("HumanoidRootPart") then
-        drone.CFrame = character.HumanoidRootPart.CFrame + Vector3.new(0, 5, 0)
-    else
-        drone.CFrame = CFrame.new(0, 10, 0)
-    end
-    
-    -- Add body gyro for rotation control
-    local bodyGyro = Instance.new("BodyGyro")
-    bodyGyro.Name = "DroneBodyGyro"
-    bodyGyro.P = 10000
-    bodyGyro.D = 1000
-    bodyGyro.MaxTorque = Vector3.new(400000, 400000, 400000)
-    bodyGyro.CFrame = drone.CFrame
-    bodyGyro.Parent = drone
-    
-    -- Add body velocity for movement control
-    local bodyVelocity = Instance.new("BodyVelocity")
-    bodyVelocity.Name = "DroneBodyVelocity"
-    bodyVelocity.Velocity = Vector3.new(0, 0, 0)
-    bodyVelocity.MaxForce = Vector3.new(100000, 100000, 100000)
-    bodyVelocity.P = 10000
-    bodyVelocity.Parent = drone
-    
-    -- Set camera to drone
-    workspace.CurrentCamera.CameraType = Enum.CameraType.Scriptable
-    workspace.CurrentCamera.CFrame = drone.CFrame
-    
-    droneCamera = drone
-    droneBodyGyro = bodyGyro
-    droneBodyVelocity = bodyVelocity
-    
-    return drone
-end
-
--- Function to create mobile controls GUI
-local function CreateMobileControlsGUI()
-    if mobileControlsGui and mobileControlsGui.Parent then
-        mobileControlsGui:Destroy()
-    end
-    
-    local screenGui = Instance.new("ScreenGui")
-    screenGui.Name = "MobileDroneControls"
-    screenGui.ResetOnSpawn = false
-    screenGui.Parent = CoreGui
-    
-    -- Left Joystick (Movement)
-    local joystickFrame = Instance.new("Frame")
-    joystickFrame.Size = UDim2.new(0, 150, 0, 150)
-    joystickFrame.Position = UDim2.new(0, 50, 1, -200)
-    joystickFrame.BackgroundColor3 = Color3.fromRGB(30, 30, 46)
-    joystickFrame.BackgroundTransparency = 0.3
-    joystickFrame.BorderSizePixel = 0
-    joystickFrame.Parent = screenGui
-    
-    local joystickCorner = Instance.new("UICorner")
-    joystickCorner.CornerRadius = UDim.new(1, 0)
-    joystickCorner.Parent = joystickFrame
-    
-    local joystickStroke = Instance.new("UIStroke")
-    joystickStroke.Color = Color3.fromRGB(76, 175, 80)
-    joystickStroke.Thickness = 3
-    joystickStroke.Parent = joystickFrame
-    
-    local joystickThumb = Instance.new("Frame")
-    joystickThumb.Size = UDim2.new(0, 50, 0, 50)
-    joystickThumb.Position = UDim2.new(0.5, -25, 0.5, -25)
-    joystickThumb.BackgroundColor3 = Color3.fromRGB(76, 175, 80)
-    joystickThumb.BorderSizePixel = 0
-    joystickThumb.Parent = joystickFrame
-    
-    local thumbCorner = Instance.new("UICorner")
-    thumbCorner.CornerRadius = UDim.new(1, 0)
-    thumbCorner.Parent = joystickThumb
-    
-    -- Right Touch Area (Camera Look)
-    local lookFrame = Instance.new("Frame")
-    lookFrame.Size = UDim2.new(0, 300, 0, 200)
-    lookFrame.Position = UDim2.new(1, -350, 0.5, -100)
-    lookFrame.BackgroundColor3 = Color3.fromRGB(30, 30, 46)
-    lookFrame.BackgroundTransparency = 0.7
-    lookFrame.BorderSizePixel = 0
-    lookFrame.Parent = screenGui
-    
-    local lookCorner = Instance.new("UICorner")
-    lookCorner.CornerRadius = UDim.new(0.1, 0)
-    lookCorner.Parent = lookFrame
-    
-    local lookLabel = Instance.new("TextLabel")
-    lookLabel.Size = UDim2.new(1, 0, 1, 0)
-    lookLabel.BackgroundTransparency = 1
-    lookLabel.Text = "Touch to Look Around"
-    lookLabel.TextColor3 = Color3.fromRGB(200, 200, 200)
-    lookLabel.Font = Enum.Font.Gotham
-    lookLabel.TextSize = 14
-    lookLabel.Parent = lookFrame
-    
-    -- Action Buttons
-    local buttonSize = UDim2.new(0, 80, 0, 80)
-    
-    -- Ascend Button
-    local ascendButton = Instance.new("TextButton")
-    ascendButton.Size = buttonSize
-    ascendButton.Position = UDim2.new(1, -100, 1, -250)
-    ascendButton.BackgroundColor3 = Color3.fromRGB(103, 58, 183)
-    ascendButton.BackgroundTransparency = 0.3
-    ascendButton.Text = "↑"
-    ascendButton.TextColor3 = Color3.new(1, 1, 1)
-    ascendButton.Font = Enum.Font.GothamBold
-    ascendButton.TextSize = 20
-    ascendButton.Parent = screenGui
-    
-    local ascendCorner = Instance.new("UICorner")
-    ascendCorner.CornerRadius = UDim.new(0.2, 0)
-    ascendCorner.Parent = ascendButton
-    
-    -- Descend Button
-    local descendButton = Instance.new("TextButton")
-    descendButton.Size = buttonSize
-    descendButton.Position = UDim2.new(1, -100, 1, -150)
-    descendButton.BackgroundColor3 = Color3.fromRGB(103, 58, 183)
-    descendButton.BackgroundTransparency = 0.3
-    descendButton.Text = "↓"
-    descendButton.TextColor3 = Color3.new(1, 1, 1)
-    descendButton.Font = Enum.Font.GothamBold
-    descendButton.TextSize = 20
-    descendButton.Parent = screenGui
-    
-    local descendCorner = Instance.new("UICorner")
-    descendCorner.CornerRadius = UDim.new(0.2, 0)
-    descendCorner.Parent = descendButton
-    
-    -- Boost Button
-    local boostButton = Instance.new("TextButton")
-    boostButton.Size = buttonSize
-    boostButton.Position = UDim2.new(1, -200, 1, -150)
-    boostButton.BackgroundColor3 = Color3.fromRGB(244, 67, 54)
-    boostButton.BackgroundTransparency = 0.3
-    boostButton.Text = "BOOST"
-    boostButton.TextColor3 = Color3.new(1, 1, 1)
-    boostButton.Font = Enum.Font.GothamBold
-    boostButton.TextSize = 12
-    boostButton.Parent = screenGui
-    
-    local boostCorner = Instance.new("UICorner")
-    boostCorner.CornerRadius = UDim.new(0.2, 0)
-    boostCorner.Parent = boostButton
-    
-    -- Exit Button
-    local exitButton = Instance.new("TextButton")
-    exitButton.Size = UDim2.new(0, 100, 0, 50)
-    exitButton.Position = UDim2.new(0.5, -50, 1, -80)
-    exitButton.BackgroundColor3 = Color3.fromRGB(244, 67, 54)
-    exitButton.BackgroundTransparency = 0.3
-    exitButton.Text = "EXIT DRONE"
-    exitButton.TextColor3 = Color3.new(1, 1, 1)
-    exitButton.Font = Enum.Font.GothamBold
-    exitButton.TextSize = 14
-    exitButton.Parent = screenGui
-    
-    local exitCorner = Instance.new("UICorner")
-    exitCorner.CornerRadius = UDim.new(0.2, 0)
-    exitCorner.Parent = exitButton
-    
-    -- Store references
-    virtualJoystick = {
-        Frame = joystickFrame,
-        Thumb = joystickThumb,
-        StartPosition = joystickFrame.AbsolutePosition + joystickFrame.AbsoluteSize / 2
-    }
-    
-    -- Connect mobile button events
-    ascendButton.MouseButton1Down:Connect(function()
-        inputStates.Up = true
-    end)
-    
-    ascendButton.MouseButton1Up:Connect(function()
-        inputStates.Up = false
-    end)
-    
-    descendButton.MouseButton1Down:Connect(function()
-        inputStates.Down = true
-    end)
-    
-    descendButton.MouseButton1Up:Connect(function()
-        inputStates.Down = false
-    end)
-    
-    boostButton.MouseButton1Click:Connect(function()
-        droneState.IsBoosting = not droneState.IsBoosting
-        droneState.CurrentSpeed = droneState.IsBoosting and DRONE_CONFIG.BoostSpeed or DRONE_CONFIG.MoveSpeed
-        boostButton.BackgroundColor3 = droneState.IsBoosting and Color3.fromRGB(76, 175, 80) or Color3.fromRGB(244, 67, 54)
-    end)
-    
-    exitButton.MouseButton1Click:Connect(function()
-        ToggleDroneCamera(false)
-    end)
-    
-    mobileControlsGui = screenGui
-    return screenGui
-end
-
--- Function to handle mobile touch input
-local function HandleMobileTouchInput(input, gameProcessed)
-    if gameProcessed or not droneCameraEnabled or not mobileControlsGui then return end
-    
-    if input.UserInputType == Enum.UserInputType.Touch then
-        local touchPosition = Vector2.new(input.Position.X, input.Position.Y)
-        
-        -- Check if touch is in joystick area
-        local joystickFrame = virtualJoystick.Frame
-        local joystickPosition = joystickFrame.AbsolutePosition
-        local joystickSize = joystickFrame.AbsoluteSize
-        
-        if input.UserInputState == Enum.UserInputState.Begin then
-            -- Check joystick area
-            if touchPosition.X >= joystickPosition.X and touchPosition.X <= joystickPosition.X + joystickSize.X and
-               touchPosition.Y >= joystickPosition.Y and touchPosition.Y <= joystickPosition.Y + joystickSize.Y then
-                mobileTouchStates.JoystickActive = true
-                mobileTouchStates.JoystickPosition = touchPosition
-            else
-                -- Check look area
-                local lookFrame = mobileControlsGui:FindFirstChild("Frame")
-                if lookFrame then
-                    local lookPosition = lookFrame.AbsolutePosition
-                    local lookSize = lookFrame.AbsoluteSize
-                    if touchPosition.X >= lookPosition.X and touchPosition.X <= lookPosition.X + lookSize.X and
-                       touchPosition.Y >= lookPosition.Y and touchPosition.Y <= lookPosition.Y + lookSize.Y then
-                        mobileTouchStates.LookActive = true
-                        mobileTouchStates.LookPosition = touchPosition
-                    end
-                end
-            end
-            
-        elseif input.UserInputState == Enum.UserInputState.Change then
-            if mobileTouchStates.JoystickActive then
-                local delta = (touchPosition - virtualJoystick.StartPosition)
-                local maxDistance = joystickSize.X / 3
-                local direction = delta / maxDistance
-                
-                -- Clamp the direction
-                if direction.Magnitude > 1 then
-                    direction = direction.Unit
-                end
-                
-                -- Update joystick thumb position
-                virtualJoystick.Thumb.Position = UDim2.new(
-                    0.5 + (direction.X * 0.3),
-                    0,
-                    0.5 + (direction.Y * 0.3),
-                    0
-                )
-                
-                droneState.MobileMoveInput = Vector2.new(direction.X, -direction.Y)
-                
-            elseif mobileTouchStates.LookActive then
-                local delta = (touchPosition - mobileTouchStates.LookPosition) * DRONE_CONFIG.TouchSensitivity * 0.01
-                droneState.MobileLookInput = Vector2.new(-delta.X, -delta.Y)
-                mobileTouchStates.LookPosition = touchPosition
-            end
-            
-        elseif input.UserInputState == Enum.UserInputState.End then
-            if mobileTouchStates.JoystickActive then
-                mobileTouchStates.JoystickActive = false
-                droneState.MobileMoveInput = Vector2.new(0, 0)
-                -- Reset joystick thumb
-                virtualJoystick.Thumb.Position = UDim2.new(0.5, -25, 0.5, -25)
-            elseif mobileTouchStates.LookActive then
-                mobileTouchStates.LookActive = false
-                droneState.MobileLookInput = Vector2.new(0, 0)
-            end
-        end
-    end
-end
-
--- Function to create drone info display (Mobile Optimized)
-local function CreateDroneInfoDisplay()
-    if droneGui and droneGui.Parent then
-        droneGui:Destroy()
-    end
-    
-    local screenGui = Instance.new("ScreenGui")
-    screenGui.Name = "DroneInfoDisplay"
-    screenGui.ResetOnSpawn = false
-    screenGui.Parent = CoreGui
-    
-    -- Info frame (positioned at top for mobile)
-    local infoFrame = Instance.new("Frame")
-    infoFrame.Size = UDim2.new(1, -40, 0, IS_MOBILE and 100 or 80)
-    infoFrame.Position = UDim2.new(0, 20, 0, 10)
-    infoFrame.BackgroundColor3 = Color3.fromRGB(30, 30, 46)
-    infoFrame.BackgroundTransparency = 0.3
-    infoFrame.BorderSizePixel = 0
-    infoFrame.Parent = screenGui
-    
-    local corner = Instance.new("UICorner")
-    corner.CornerRadius = UDim.new(0.1, 0)
-    corner.Parent = infoFrame
-    
-    local stroke = Instance.new("UIStroke")
-    stroke.Color = Color3.fromRGB(76, 175, 80)
-    stroke.Thickness = 2
-    stroke.Parent = infoFrame
-    
-    -- Status text
-    local statusLabel = Instance.new("TextLabel")
-    statusLabel.Size = UDim2.new(1, -10, 0, IS_MOBILE and 30 or 25)
-    statusLabel.Position = UDim2.new(0, 5, 0, 5)
-    statusLabel.BackgroundTransparency = 1
-    statusLabel.Text = "🚁 DRONE MODE ACTIVE" .. (IS_MOBILE and " (MOBILE)" or "")
-    statusLabel.TextColor3 = Color3.fromRGB(76, 175, 80)
-    statusLabel.Font = Enum.Font.GothamBold
-    statusLabel.TextSize = IS_MOBILE and 16 or 14
-    statusLabel.Parent = infoFrame
-    
-    -- Speed info
-    local speedLabel = Instance.new("TextLabel")
-    speedLabel.Size = UDim2.new(0.5, -5, 0, IS_MOBILE and 25 or 20)
-    speedLabel.Position = UDim2.new(0, 5, 0, IS_MOBILE and 35 or 30)
-    speedLabel.BackgroundTransparency = 1
-    speedLabel.Text = "Speed: " .. DRONE_CONFIG.MoveSpeed
-    speedLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
-    speedLabel.Font = Enum.Font.Gotham
-    speedLabel.TextSize = IS_MOBILE and 14 or 12
-    speedLabel.TextXAlignment = Enum.TextXAlignment.Left
-    speedLabel.Parent = infoFrame
-    
-    -- Mode info
-    local modeLabel = Instance.new("TextLabel")
-    modeLabel.Size = UDim2.new(0.5, -5, 0, IS_MOBILE and 25 or 20)
-    modeLabel.Position = UDim2.new(0.5, 0, 0, IS_MOBILE and 35 or 30)
-    modeLabel.BackgroundTransparency = 1
-    modeLabel.Text = "Mode: " .. (droneState.IsBoosting and "BOOST" or "NORMAL")
-    modeLabel.TextColor3 = droneState.IsBoosting and Color3.fromRGB(255, 255, 0) or Color3.fromRGB(200, 200, 200)
-    modeLabel.Font = Enum.Font.Gotham
-    modeLabel.TextSize = IS_MOBILE and 14 or 12
-    modeLabel.TextXAlignment = Enum.TextXAlignment.Left
-    modeLabel.Parent = infoFrame
-    
-    -- Position info
-    local posLabel = Instance.new("TextLabel")
-    posLabel.Size = UDim2.new(1, -10, 0, IS_MOBILE and 25 or 20)
-    posLabel.Position = UDim2.new(0, 5, 0, IS_MOBILE and 60 or 50)
-    posLabel.BackgroundTransparency = 1
-    posLabel.Text = "X: 0 Y: 0 Z: 0"
-    posLabel.TextColor3 = Color3.fromRGB(200, 200, 200)
-    posLabel.Font = Enum.Font.Gotham
-    posLabel.TextSize = IS_MOBILE and 12 or 11
-    posLabel.TextXAlignment = Enum.TextXAlignment.Left
-    posLabel.Parent = infoFrame
-    
-    droneGui = screenGui
-    
-    -- Update position info in real-time
-    task.spawn(function()
-        while droneGui and droneGui.Parent and droneCameraEnabled do
-            if droneCamera then
-                local pos = droneCamera.Position
-                posLabel.Text = string.format("X: %d Y: %d Z: %d", math.floor(pos.X), math.floor(pos.Y), math.floor(pos.Z))
-                
-                -- Update speed and mode display
-                local speed = droneState.IsBoosting and DRONE_CONFIG.BoostSpeed or DRONE_CONFIG.MoveSpeed
-                speedLabel.Text = "Speed: " .. speed
-                modeLabel.Text = "Mode: " .. (droneState.IsBoosting and "BOOST" or "NORMAL")
-                modeLabel.TextColor3 = droneState.IsBoosting and Color3.fromRGB(255, 255, 0) or Color3.fromRGB(200, 200, 200)
-            end
-            task.wait(0.1)
-        end
-    end)
-    
-    return screenGui
-end
-
--- Function to handle desktop input
-local function HandleDroneInput(input, gameProcessed)
-    if gameProcessed or not droneCameraEnabled or not droneCamera then return end
-    
-    local keyCode = input.KeyCode
-    
-    -- Movement keys
-    if keyCode == Enum.KeyCode.W then
-        inputStates.Forward = input.UserInputState == Enum.UserInputState.Begin
-    elseif keyCode == Enum.KeyCode.S then
-        inputStates.Backward = input.UserInputState == Enum.UserInputState.Begin
-    elseif keyCode == Enum.KeyCode.A then
-        inputStates.Left = input.UserInputState == Enum.UserInputState.Begin
-    elseif keyCode == Enum.KeyCode.D then
-        inputStates.Right = input.UserInputState == Enum.UserInputState.Begin
-    elseif keyCode == Enum.KeyCode.Space then
-        inputStates.Up = input.UserInputState == Enum.UserInputState.Begin
-    elseif keyCode == Enum.KeyCode.LeftShift then
-        inputStates.Down = input.UserInputState == Enum.UserInputState.Begin
-    elseif keyCode == Enum.KeyCode.F and input.UserInputState == Enum.UserInputState.Begin then
-        droneState.IsBoosting = not droneState.IsBoosting
-        droneState.CurrentSpeed = droneState.IsBoosting and DRONE_CONFIG.BoostSpeed or DRONE_CONFIG.MoveSpeed
-    elseif keyCode == Enum.KeyCode.R and input.UserInputState == Enum.UserInputState.Begin then
-        -- Reset camera orientation
-        if droneBodyGyro then
-            droneBodyGyro.CFrame = CFrame.new(droneCamera.Position, droneCamera.Position + Vector3.new(0, 0, -1))
-        end
-    elseif keyCode == Enum.KeyCode.X and input.UserInputState == Enum.UserInputState.Begin then
-        ToggleDroneCamera(false)
-    end
-end
-
--- Function to handle mouse movement
-local function HandleMouseMovement(input)
-    if not droneCameraEnabled or not droneBodyGyro then return end
-    
-    if input.UserInputType == Enum.UserInputType.MouseMovement then
-        local delta = Vector2.new(input.Delta.X, input.Delta.Y) * DRONE_CONFIG.MouseSensitivity
-        
-        if droneBodyGyro then
-            local currentCF = droneBodyGyro.CFrame
-            local yaw = CFrame.fromAxisAngle(Vector3.new(0, 1, 0), -delta.X * 0.01)
-            local pitch = CFrame.fromAxisAngle(currentCF.RightVector, -delta.Y * 0.01)
-            
-            droneBodyGyro.CFrame = currentCF * yaw * pitch
-        end
-    end
-end
-
--- Function to handle mouse wheel
-local function HandleMouseWheel(input)
-    if not droneCameraEnabled then return end
-    
-    if input.UserInputType == Enum.UserInputType.MouseWheel then
-        DRONE_CONFIG.MouseSensitivity = math.clamp(
-            DRONE_CONFIG.MouseSensitivity + (input.Position.Z * 0.1),
-            0.1,
-            2.0
-        )
-    end
-end
-
--- Modified movement function for mobile support
-local function UpdateDroneMovement()
-    if not droneCameraEnabled or not droneCamera or not droneBodyVelocity then return end
-    
-    local moveDirection = Vector3.new(0, 0, 0)
-    local cameraCF = droneBodyGyro and droneBodyGyro.CFrame or droneCamera.CFrame
-    
-    if IS_MOBILE then
-        -- Mobile movement using virtual joystick
-        local joystickInput = droneState.MobileMoveInput
-        if joystickInput.Magnitude > 0.1 then
-            moveDirection = moveDirection + (cameraCF.LookVector * joystickInput.Y)
-            moveDirection = moveDirection + (cameraCF.RightVector * joystickInput.X)
-        end
-        
-        -- Mobile camera look
-        local lookInput = droneState.MobileLookInput
-        if lookInput.Magnitude > 0 then
-            if droneBodyGyro then
-                local yaw = CFrame.fromAxisAngle(Vector3.new(0, 1, 0), -lookInput.X)
-                local pitch = CFrame.fromAxisAngle(cameraCF.RightVector, -lookInput.Y)
-                droneBodyGyro.CFrame = cameraCF * yaw * pitch
-            end
-        end
-        
-    else
-        -- Desktop movement (original code)
-        if inputStates.Forward then
-            moveDirection = moveDirection + cameraCF.LookVector
-        end
-        if inputStates.Backward then
-            moveDirection = moveDirection - cameraCF.LookVector
-        end
-        if inputStates.Right then
-            moveDirection = moveDirection + cameraCF.RightVector
-        end
-        if inputStates.Left then
-            moveDirection = moveDirection - cameraCF.RightVector
-        end
-    end
-    
-    -- Vertical movement (both mobile and desktop)
-    if inputStates.Up then
-        moveDirection = moveDirection + Vector3.new(0, 1, 0)
-    end
-    if inputStates.Down then
-        moveDirection = moveDirection + Vector3.new(0, -1, 0)
-    end
-    
-    -- Normalize direction and apply speed
-    if moveDirection.Magnitude > 0 then
-        moveDirection = moveDirection.Unit * droneState.CurrentSpeed
-    end
-    
-    -- Apply smooth acceleration
-    local targetVelocity = moveDirection
-    droneState.Velocity = droneState.Velocity:Lerp(targetVelocity, 0.3)
-    
-    -- Set velocity
-    droneBodyVelocity.Velocity = droneState.Velocity
-    
-    -- Desktop rotation (Q/E keys)
-    if not IS_MOBILE and droneBodyGyro then
-        local rotation = 0
-        if UserInputService:IsKeyDown(Enum.KeyCode.Q) then
-            rotation = rotation + DRONE_CONFIG.RotationSpeed
-        end
-        if UserInputService:IsKeyDown(Enum.KeyCode.E) then
-            rotation = rotation - DRONE_CONFIG.RotationSpeed
-        end
-        
-        if rotation ~= 0 then
-            local rotateCF = CFrame.fromAxisAngle(Vector3.new(0, 1, 0), rotation * 0.05)
-            droneBodyGyro.CFrame = droneBodyGyro.CFrame * rotateCF
-        end
-    end
-end
-
--- Modified toggle function with mobile support
-local function ToggleDroneCamera(enable)
-    if enable == droneCameraEnabled then return end
-    
-    if enable then
-        -- Enable drone camera
-        droneCameraEnabled = true
-        
-        -- Create drone and GUI
-        CreateDroneCamera()
-        CreateDroneInfoDisplay()
-        
-        -- Create mobile controls if on mobile
-        if IS_MOBILE then
-            CreateMobileControlsGUI()
-        end
-        
-        -- Connect input events
-        droneConnection = RunService.Heartbeat:Connect(UpdateDroneMovement)
-        
-        if IS_MOBILE then
-            -- Mobile touch events
-            UserInputService.TouchStarted:Connect(HandleMobileTouchInput)
-            UserInputService.TouchMoved:Connect(HandleMobileTouchInput)
-            UserInputService.TouchEnded:Connect(HandleMobileTouchInput)
-        else
-            -- Desktop input events
-            UserInputService.InputBegan:Connect(HandleDroneInput)
-            UserInputService.InputEnded:Connect(HandleDroneInput)
-            UserInputService.InputChanged:Connect(HandleMouseMovement)
-            UserInputService.InputChanged:Connect(HandleMouseWheel)
-        end
-        
-        -- Hide player character if exists
-        local character = LocalPlayer.Character
-        if character then
-            for _, part in ipairs(character:GetDescendants()) do
-                if part:IsA("BasePart") then
-                    part.LocalTransparencyModifier = 1
+-- Auto-clean money icons
+task.spawn(function()
+    while task.wait(1) do
+        for _, obj in ipairs(CoreGui:GetDescendants()) do
+            if obj and (obj:IsA("ImageLabel") or obj:IsA("ImageButton") or obj:IsA("TextLabel")) then
+                local nameLower = (obj.Name or ""):lower()
+                local textLower = (obj.Text or ""):lower()
+                if string.find(nameLower, "money") or string.find(textLower, "money") or string.find(nameLower, "100") then
+                    pcall(function()
+                        obj.Visible = false
+                        if obj:IsA("GuiObject") then
+                            obj.Active = false
+                            obj.ZIndex = 0
+                        end
+                    end)
                 end
             end
         end
-        
-        local platformText = IS_MOBILE and "Mobile controls activated!" or "Desktop controls activated!"
-        Notify({
-            Title = "🚁 Drone Camera", 
-            Content = "Drone mode activated! " .. platformText,
-            Duration = 5
+    end
+end)
+
+-- Notification System
+local function Notify(opts)
+    pcall(function()
+        WindUI:Notify({
+            Title = opts.Title or "Notification",
+            Content = opts.Content or "",
+            Duration = opts.Duration or 3,
+            Icon = opts.Icon or "info"
         })
-        
-    else
-        -- Disable drone camera
-        droneCameraEnabled = false
-        
-        -- Disconnect events
-        if droneConnection then
-            droneConnection:Disconnect()
-            droneConnection = nil
-        end
-        
-        -- Restore original camera
-        if originalCamera then
-            workspace.CurrentCamera.CameraType = Enum.CameraType.Custom
-        end
-        
-        -- Clean up drone
-        if droneCamera then
-            droneCamera:Destroy()
-            droneCamera = nil
-        end
-        
-        -- Clean up GUI
-        if droneControlsGui then
-            droneControlsGui:Destroy()
-            droneControlsGui = nil
-        end
-        
-        if droneGui then
-            droneGui:Destroy()
-            droneGui = nil
-        end
-        
-        if mobileControlsGui then
-            mobileControlsGui:Destroy()
-            mobileControlsGui = nil
-        end
-        
-        -- Show player character
-        local character = LocalPlayer.Character
-        if character then
-            for _, part in ipairs(character:GetDescendants()) do
-                if part:IsA("BasePart") then
-                    part.LocalTransparencyModifier = 0
-                end
-            end
-        end
-        
-        -- Reset input states
-        for key, _ in pairs(inputStates) do
-            inputStates[key] = false
-        end
-        
-        droneState = {
-            Velocity = Vector3.new(0, 0, 0),
-            IsBoosting = false,
-            CurrentSpeed = DRONE_CONFIG.MoveSpeed,
-            MobileMoveInput = Vector2.new(0, 0),
-            MobileLookInput = Vector2.new(0, 0)
-        }
-        
-        Notify({
-            Title = "🚁 Drone Camera", 
-            Content = "Drone mode deactivated.",
-            Duration = 3
-        })
-    end
+    end)
 end
-
--- Mobile-specific functions
-local function SetTouchSensitivity(sensitivity)
-    if type(sensitivity) == "number" and sensitivity >= 0.5 and sensitivity <= 5.0 then
-        DRONE_CONFIG.TouchSensitivity = sensitivity
-        return true
-    end
-    return false
-end
-
--- Drone configuration functions
-local function SetDroneSpeed(speed)
-    if type(speed) == "number" and speed > 0 and speed <= DRONE_CONFIG.MaxSpeed then
-        DRONE_CONFIG.MoveSpeed = speed
-        if not droneState.IsBoosting then
-            droneState.CurrentSpeed = speed
-        end
-        return true
-    end
-    return false
-end
-
-local function SetDroneBoostSpeed(speed)
-    if type(speed) == "number" and speed > 0 and speed <= DRONE_CONFIG.MaxSpeed then
-        DRONE_CONFIG.BoostSpeed = speed
-        if droneState.IsBoosting then
-            droneState.CurrentSpeed = speed
-        end
-        return true
-    end
-    return false
-end
-
-local function SetDroneSensitivity(sensitivity)
-    if type(sensitivity) == "number" and sensitivity >= 0.1 and sensitivity <= 2.0 then
-        DRONE_CONFIG.MouseSensitivity = sensitivity
-        return true
-    end
-    return false
-end
-
--- Cinematic camera modes
-local function SetCinematicMode(mode)
-    if not droneCameraEnabled then return end
-    
-    local modes = {
-        ["Default"] = {MoveSpeed = 25, BoostSpeed = 50, Sensitivity = 0.5},
-        ["Cinematic"] = {MoveSpeed = 15, BoostSpeed = 30, Sensitivity = 0.3},
-        ["Action"] = {MoveSpeed = 35, BoostSpeed = 70, Sensitivity = 0.8},
-        ["Precision"] = {MoveSpeed = 10, BoostSpeed = 20, Sensitivity = 0.2},
-        ["Mobile"] = {MoveSpeed = 20, BoostSpeed = 40, Sensitivity = 2.0}
-    }
-    
-    if modes[mode] then
-        DRONE_CONFIG.MoveSpeed = modes[mode].MoveSpeed
-        DRONE_CONFIG.BoostSpeed = modes[mode].BoostSpeed
-        if IS_MOBILE then
-            DRONE_CONFIG.TouchSensitivity = modes[mode].Sensitivity
-        else
-            DRONE_CONFIG.MouseSensitivity = modes[mode].Sensitivity
-        end
-        
-        if not droneState.IsBoosting then
-            droneState.CurrentSpeed = DRONE_CONFIG.MoveSpeed
-        end
-        
-        Notify({
-            Title = "🎬 Cinematic Mode",
-            Content = mode .. " mode activated",
-            Duration = 3
-        })
-    end
-end
-
--- Function to toggle drone freecam
-local function ToggleFreecam()
-    if not droneCameraEnabled or not droneCamera then return end
-    
-    droneCamera.CanCollide = not droneCamera.CanCollide
-    Notify({
-        Title = "🚁 Freecam",
-        Content = droneCamera.CanCollide and "Collision: ON" or "Collision: OFF",
-        Duration = 2
-    })
-end
-
--- Function to save drone position
-local savedDronePositions = {}
-local function SaveDronePosition(name)
-    if not droneCameraEnabled or not droneCamera then return false end
-    
-    savedDronePositions[name] = {
-        Position = droneCamera.Position,
-        Orientation = droneCamera.Orientation
-    }
-    
-    Notify({
-        Title = "📍 Position Saved",
-        Content = "Drone position '" .. name .. "' saved",
-        Duration = 3
-    })
-    
-    return true
-end
-
--- Function to load drone position
-local function LoadDronePosition(name)
-    if not droneCameraEnabled or not droneCamera or not savedDronePositions[name] then return false end
-    
-    local pos = savedDronePositions[name]
-    droneCamera.CFrame = CFrame.new(pos.Position) * CFrame.Angles(
-        math.rad(pos.Orientation.X),
-        math.rad(pos.Orientation.Y),
-        math.rad(pos.Orientation.Z)
-    )
-    
-    Notify({
-        Title = "📍 Position Loaded",
-        Content = "Teleported to '" .. name .. "'",
-        Duration = 3
-    })
-    
-    return true
-end
-
--- Auto-adjust for mobile
-local function AutoAdjustForMobile()
-    if IS_MOBILE then
-        -- Adjust settings for better mobile experience
-        DRONE_CONFIG.MoveSpeed = 20
-        DRONE_CONFIG.BoostSpeed = 40
-        DRONE_CONFIG.TouchSensitivity = 2.0
-    end
-end
-
--- Call auto-adjust on startup
-AutoAdjustForMobile()
 
 -- =============================================================================
--- BLATANT FISHING SYSTEM - FIXED INSTANT CAST VERSION
+-- BLATANT FISHING SYSTEM - UPDATED WORKING VERSION
 -- =============================================================================
-
--- Variabel untuk tracking status
-local isBlatantInitialized = false
-local blatantLoopRunning = false
 
 local function InitializeBlatantFishing()
-    if isBlatantInitialized then return true end
-    
     local success, result = pcall(function()
         -- Load required modules for Blatant Fishing
         Net_upvr = require(ReplicatedStorage.Packages.Net)
@@ -1094,23 +261,20 @@ local function InitializeBlatantFishing()
             end
         end
         
-        if not module_upvr then
-            return false, "Fishing module not found"
-        end
-        
         -- Get remote events/functions
         FISHING_COMPLETED_REMOTE = Net_upvr:RemoteEvent("FishingCompleted")
         RequestFishingMinigameStarted_Net = Net_upvr:RemoteFunction("RequestFishingMinigameStarted")
         
         -- Save original functions
-        originalFishingRodStarted = module_upvr.FishingRodStarted
-        originalSendFishingRequestToServer = module_upvr.SendFishingRequestToServer
-        originalRequestChargeFishingRod = module_upvr.RequestChargeFishingRod
+        if module_upvr then
+            originalFishingRodStarted = module_upvr.FishingRodStarted
+            originalSendFishingRequestToServer = module_upvr.SendFishingRequestToServer
+            originalRequestChargeFishingRod = module_upvr.RequestChargeFishingRod
+        end
         
         -- Initialize trove
         BLATANT_MODE_TROVE = Trove_upvr.new()
         
-        isBlatantInitialized = true
         return true
     end)
     
@@ -1123,11 +287,45 @@ local function InitializeBlatantFishing()
     end
 end
 
--- =============================================================================
--- INSTANT CAST CORE FUNCTIONS
--- =============================================================================
+-- Fungsi yang menjalankan logika penyelesaian minigame secara instan (Blatant)
+local function AutoFishComplete(rodData, minigameData)
+    -- Blantant Mode: Delay reel (0 - 1.87)
+    local reelDelay = blatantReelDelay
+    if reelDelay > 0 then
+        task.wait(reelDelay)
+    end
+    
+    -- Fishing Complete: Langsung tembak RemoteEvent "FishingCompleted" ke server.
+    pcall(function()
+        FISHING_COMPLETED_REMOTE:FireServer() 
+    end)
+    
+    print("⚡ Blatant Mode: Minigame Bypassed. Fish Retrieved.")
 
+    -- PERUBAHAN: Hapus delay di sini. Loop casting yang akan mengontrol delay.
+    -- if blatantFishingDelay > 0 then
+    --     task.wait(blatantFishingDelay)
+    -- end
+end
+
+-- Fungsi HOOK untuk menimpa 'FishingRodStarted'
+local function HookFishingRodStarted(rodData, minigameData)
+    if isBlatantActive then
+        -- Jika mode Blatant aktif, langsung selesaikan di thread terpisah (Non-Blocking)
+        task.spawn(function()
+            AutoFishComplete(rodData, minigameData)
+        end)
+    else
+        -- Jika tidak aktif, jalankan fungsi asli
+        if originalFishingRodStarted then
+            originalFishingRodStarted(rodData, minigameData)
+        end
+    end
+end
+
+-- Fungsi untuk mendapatkan mouse position yang aman
 local function GetSafeMousePosition()
+    local UserInputService = game:GetService("UserInputService")
     local CurrentCamera = workspace.CurrentCamera
     
     if UserInputService.MouseEnabled then
@@ -1138,8 +336,31 @@ local function GetSafeMousePosition()
     end
 end
 
--- Method 1: Direct server call - PALING EFEKTIF
-local function InstantCastMethod1()
+-- Approach 1: Menggunakan RequestChargeFishingRod dengan bypass
+local function BlatantCastMethod1()
+    local success, result = pcall(function()
+        -- Set konfirmasi untuk bypass user input
+        _G.confirmFishingInput = function() return true end
+        
+        local mousePos = GetSafeMousePosition()
+        local skipCharge = true
+        
+        -- Panggil RequestChargeFishingRod dengan parameter skip charge yang disuntikkan
+        local castResult = module_upvr:RequestChargeFishingRod(mousePos, nil, skipCharge) -- Tambahkan skipCharge
+        
+        _G.confirmFishingInput = nil
+        return castResult
+    end)
+    
+    return success and result -- return success DAN result
+end
+
+-- Approach 2: Direct server call (Dibiarkan untuk referensi)
+local function BlatantCastMethod2()
+    if not RequestFishingMinigameStarted_Net then
+        return false
+    end
+    
     local success, result = pcall(function()
         -- Get character position
         local character = LocalPlayer.Character
@@ -1147,326 +368,104 @@ local function InstantCastMethod1()
             return false, "No character found"
         end
         
-        -- Position di depan karakter
-        local throwPosition = character.HumanoidRootPart.Position + character.HumanoidRootPart.CFrame.LookVector * 12
-        local power = 0.5  -- Power default
+        local throwPosition = character.HumanoidRootPart.Position + Vector3.new(0, -1, 10)
+        local power = 0.5
         local castTime = workspace:GetServerTimeNow()
         
-        print("🎯 Attempting direct server cast...")
-        
-        -- Direct invoke ke server tanpa proses charge client
         local serverSuccess, serverResult = RequestFishingMinigameStarted_Net:InvokeServer(
-            throwPosition.Y,  -- Y position untuk raycast
-            power,            -- Power fishing
-            castTime          -- Timestamp
+            throwPosition.Y,
+            power, 
+            castTime
         )
         
         if serverSuccess then
-            print("✅ Direct server cast SUCCESS")
-            -- Trigger FishingRodStarted manually untuk memulai fishing process
+            -- Trigger FishingRodStarted manually
             if module_upvr and module_upvr.FishingRodStarted then
                 module_upvr:FishingRodStarted(serverResult)
             end
             return true
         else
-            print("❌ Direct server cast failed:", tostring(serverResult))
             return false, tostring(serverResult)
         end
     end)
     
-    if not success then
-        print("❌ Direct cast error:", tostring(result))
-    end
-    
     return success
 end
 
--- Method 2: Bypass charge system
-local function InstantCastMethod2()
+-- Approach 3: Menggunakan SendFishingRequestToServer langsung (Dibiarkan untuk referensi)
+local function BlatantCastMethod3()
+    if not module_upvr or not module_upvr.SendFishingRequestToServer then
+        return false
+    end
+    
     local success, result = pcall(function()
-        -- Bypass semua input confirmation
-        _G.confirmFishingInput = function() 
-            print("✅ Bypassing user input confirmation")
-            return true 
-        end
-        
         local mousePos = GetSafeMousePosition()
+        local power = 0.5
+        local skipCharge = true
         
-        print("🎯 Attempting bypass charge cast...")
-        
-        -- Paksa skip charge dengan parameter ketiga = true
-        local castResult = module_upvr:RequestChargeFishingRod(mousePos, nil, true)
-        
-        _G.confirmFishingInput = nil
-        
-        if castResult then
-            print("✅ Bypass charge cast SUCCESS")
-        else
-            print("❌ Bypass charge cast failed")
-        end
-        
-        return castResult
+        local sendSuccess, sendResult = module_upvr:SendFishingRequestToServer(mousePos, power, skipCharge)
+        return sendSuccess
     end)
     
-    if not success then
-        print("❌ Bypass cast error:", tostring(result))
-    end
-    
     return success
 end
 
--- Main instant casting function dengan fallback
-local function InstantCastFishingRod()
-    print("🎣 ATTEMPTING INSTANT CAST...")
-    
-    -- Cek apakah fishing rod equipped
-    if not module_upvr then
-        print("❌ Fishing module not loaded")
-        return false
-    end
-    
-    -- Cek cooldown
-    if module_upvr:OnCooldown() then
-        print("⏳ On cooldown, waiting...")
-        return false
-    end
-    
-    -- Coba method direct server call dulu (paling reliable)
-    local success = InstantCastMethod1()
+-- Main blatant casting function (Menggunakan Method 1 untuk spam)
+local function BlatantCastFishingRod()
+    local success = BlatantCastMethod1()
     if success then
+        -- Casting berhasil, segera kembalikan 'true' agar loop bisa lempar lagi
+        print("✅ Blatant Cast: Method 1 (Spam Cast) successful")
         return true
     end
     
-    -- Tunggu sebentar sebelum fallback
-    task.wait(0.05)
-    
-    -- Fallback ke method bypass charge
-    success = InstantCastMethod2()
-    return success
+    print("❌ Blatant Cast: Method 1 failed")
+    return false
 end
 
 -- =============================================================================
--- INSTANT COMPLETION SYSTEM
+-- BLATANT FISHING LOOP (Pengontrol Kecepatan Spam)
 -- =============================================================================
 
-local function InstantFishComplete(rodData, minigameData)
-    print("⚡ INSTANT COMPLETION: Starting...")
-    
-    -- Tunggu delay reel yang sangat kecil
-    if blatantReelDelay > 0 then
-        print("⏳ Waiting reel delay:", blatantReelDelay)
-        task.wait(blatantReelDelay)
-    end
-    
-    -- Langsung complete fishing
-    local success = pcall(function()
-        FISHING_COMPLETED_REMOTE:FireServer() 
-    end)
-    
-    if success then
-        print("✅ INSTANT COMPLETION: Fishing completed!")
-    else
-        print("❌ INSTANT COMPLETION: Failed to complete fishing")
-    end
-end
-
--- Hook untuk FishingRodStarted - INSTANT VERSION
-local function HookFishingRodStarted_Instant(rodData, minigameData)
-    if isBlatantActive then
-        print("⚡ HOOK: FishingRodStarted triggered - Auto completing...")
+local function BlatantFishingLoop()
+    while isBlatantActive do
+        local castSuccess = BlatantCastFishingRod()
         
-        -- Langsung complete fishing tanpa blocking loop utama
-        task.spawn(function()
-            InstantFishComplete(rodData, minigameData)
-        end)
-    else
-        -- Jika tidak aktif, jalankan fungsi asli
-        if originalFishingRodStarted then
-            originalFishingRodStarted(rodData, minigameData)
+        if not castSuccess then
+            print("🔄 Retrying cast...")
         end
+
+        -- Delay murni untuk mengontrol kecepatan spam cast (cooldown antar lemparan)
+        task.wait(blatantFishingDelay)
     end
 end
 
--- Hook untuk RequestChargeFishingRod - INSTANT VERSION
-local function HookRequestChargeFishingRod_Instant(arg1, arg2, arg3)
+-- Hook untuk RequestChargeFishingRod
+local function HookRequestChargeFishingRod(arg1, arg2, arg3)
     if isBlatantActive then
-        print("⚡ HOOK: RequestChargeFishingRod - Bypassing charge animation")
+        print("⚡ Blatant Mode: Fast casting via RequestChargeFishingRod")
         
-        -- Force skip charge dengan parameter true
+        -- Di Blatant Mode, gunakan parameter untuk skip charging
         local mousePos = arg1 or GetSafeMousePosition()
+        local skipCharge = true
         
-        return originalRequestChargeFishingRod(mousePos, arg2, true)
+        return originalRequestChargeFishingRod(mousePos, arg2, skipCharge)
     else
         return originalRequestChargeFishingRod(arg1, arg2, arg3)
     end
 end
 
--- =============================================================================
--- ROBUST FISHING LOOP - DENGAN ERROR HANDLING
--- =============================================================================
-
-local function RobustFishingLoop()
-    if blatantLoopRunning then
-        print("⚠️ Fishing loop already running")
-        return
-    end
-    
-    blatantLoopRunning = true
-    local castCount = 0
-    
-    print("🚀 STARTING ROBUST FISHING LOOP...")
-    
-    while isBlatantActive do
-        local success, error = pcall(function()
-            -- Instant cast tanpa delay apapun
-            local castSuccess = InstantCastFishingRod()
-            
-            if castSuccess then
-                castCount = castCount + 1
-                print("🎯 CAST SUCCESS #" .. castCount)
-            else
-                print("🔄 CAST FAILED - Retrying...")
-            end
-
-            -- Delay sangat kecil untuk spam maksimal
-            if blatantFishingDelay > 0 then
-                task.wait(blatantFishingDelay)
-            end
-        end)
-        
-        if not success then
-            print("❌ LOOP ERROR:", error)
-            -- Tunggu sebentar sebelum retry jika ada error
-            task.wait(0.1)
-        end
-        
-        -- Safety check
-        if not isBlatantActive then break end
-    end
-    
-    blatantLoopRunning = false
-    print("🛑 FISHING LOOP STOPPED. Total casts:", castCount)
-end
-
--- =============================================================================
--- IMPROVED TOGGLE SYSTEM - DENGAN BETTER ERROR HANDLING
--- =============================================================================
-
-local function ToggleBlatantMode(enable)
-    if enable == isBlatantActive then 
-        print("ℹ️ Blatant mode already", enable and "enabled" or "disabled")
-        return 
-    end
-    
-    if enable then
-        print("🔄 ENABLING BLATANT MODE...")
-        
-        -- Initialize system if not already initialized
-        if not isBlatantInitialized then
-            print("🔧 Initializing blatant system...")
-            if not InitializeBlatantFishing() then
-                Notify({Title = "❌ Error", Content = "Failed to initialize fishing system", Duration = 3})
-                return false
-            end
-        end
-        
-        isBlatantActive = true
-        print("✅ BLATANT MODE: ENABLED")
-        
-        -- Terapkan Hook pada fungsi-fungsi fishing
-        if module_upvr then
-            print("🔗 Applying hooks...")
-            
-            -- Hook FishingRodStarted
-            if module_upvr.FishingRodStarted ~= HookFishingRodStarted_Instant then
-                module_upvr.FishingRodStarted = HookFishingRodStarted_Instant
-                print("✅ Hooked FishingRodStarted")
-            end
-            
-            -- Hook RequestChargeFishingRod
-            if module_upvr.RequestChargeFishingRod and module_upvr.RequestChargeFishingRod ~= HookRequestChargeFishingRod_Instant then
-                module_upvr.RequestChargeFishingRod = HookRequestChargeFishingRod_Instant
-                print("✅ Hooked RequestChargeFishingRod")
-            end
-            
-            -- Tambahkan fungsi pembersihan ke Trove
-            if BLATANT_MODE_TROVE then
-                BLATANT_MODE_TROVE:Add(function() 
-                    print("🧹 Cleaning up hooks...")
-                    if module_upvr then
-                        if originalFishingRodStarted then
-                            module_upvr.FishingRodStarted = originalFishingRodStarted 
-                        end
-                        if originalRequestChargeFishingRod then
-                            module_upvr.RequestChargeFishingRod = originalRequestChargeFishingRod
-                        end
-                    end
-                end)
-            end
-        else
-            print("❌ Module_upvr not found!")
-            Notify({Title = "❌ Error", Content = "Fishing module not found", Duration = 3})
-            return false
-        end
-        
-        -- Jalankan loop INSTANT Fishing
-        if BLATANT_MODE_TROVE then
-            BLATANT_MODE_TROVE:Add(task.spawn(RobustFishingLoop))
-            print("🔄 Starting fishing loop...")
-        end
-        
-        Notify({Title = "⚡ INSTANT CAST", Content = "Instant fishing activated!", Duration = 3})
-        
+-- Hook untuk SendFishingRequestToServer
+local function HookSendFishingRequestToServer(mousePosition, power, skipCharge)
+    if isBlatantActive then
+        print("⚡ Blatant Mode: SendFishingRequestToServer with forced parameters")
+        return originalSendFishingRequestToServer(mousePosition, 0.5, true)
     else
-        print("🔄 DISABLING BLATANT MODE...")
-        isBlatantActive = false
-        
-        -- Cleanup
-        if BLATANT_MODE_TROVE then
-            BLATANT_MODE_TROVE:Clean()
-            print("✅ Cleaned up trove")
-        end
-        
-        -- Restore original functions
-        if module_upvr then
-            if originalFishingRodStarted then
-                module_upvr.FishingRodStarted = originalFishingRodStarted
-            end
-            if originalRequestChargeFishingRod then
-                module_upvr.RequestChargeFishingRod = originalRequestChargeFishingRod
-            end
-            print("✅ Restored original functions")
-        end
-        
-        Notify({Title = "Blatant Fishing", Content = "Instant cast mode deactivated", Duration = 3})
-        print("✅ BLATANT MODE: DISABLED")
+        return originalSendFishingRequestToServer(mousePosition, power, skipCharge)
     end
-    
-    return true
 end
 
--- Manual fishing function untuk testing
-local function ManualBlatantFish()
-    if not isBlatantActive then
-        Notify({Title = "Blatant Fishing", Content = "Please enable Blatant Mode first", Duration = 3})
-        return
-    end
-    
-    print("🎯 MANUAL CAST ATTEMPT...")
-    pcall(function()
-        local success = InstantCastFishingRod()
-        if success then
-            Notify({Title = "⚡ Manual Cast", Content = "Casting fishing rod instantly...", Duration = 2})
-        else
-            Notify({Title = "❌ Manual Cast Failed", Content = "Failed to cast fishing rod", Duration = 2})
-        end
-    end)
-end
-
--- =============================================================================
--- CONFIGURATION FUNCTIONS
--- =============================================================================
-
+-- Fungsi untuk mengatur delay reel
 local function SetBlatantReelDelay(delay)
     if type(delay) == "number" and delay >= 0 and delay <= 1.87 then
         blatantReelDelay = delay
@@ -1480,6 +479,7 @@ local function SetBlatantReelDelay(delay)
     return false
 end
 
+-- Fungsi untuk mengatur delay fishing
 local function SetBlatantFishingDelay(delay)
     if type(delay) == "number" and delay >= 0 and delay <= 5 then
         blatantFishingDelay = delay
@@ -1491,6 +491,105 @@ local function SetBlatantFishingDelay(delay)
         return true
     end
     return false
+end
+
+-- Fungsi publik untuk mengaktifkan/menonaktifkan Blatant Mode
+local function ToggleBlatantMode(enable)
+    if enable == isBlatantActive then return end
+    
+    if enable then
+        -- Initialize system if not already initialized
+        if not module_upvr or not FISHING_COMPLETED_REMOTE then
+            if not InitializeBlatantFishing() then
+                return false
+            end
+        end
+        
+        isBlatantActive = true
+        print("✅ Blantant Mode (Fast Fishing): ENABLED.")
+        
+        -- Terapkan Hook pada fungsi-fungsi fishing
+        if module_upvr then
+            if module_upvr.FishingRodStarted ~= HookFishingRodStarted then
+                module_upvr.FishingRodStarted = HookFishingRodStarted
+            end
+            
+            if module_upvr.RequestChargeFishingRod and module_upvr.RequestChargeFishingRod ~= HookRequestChargeFishingRod then
+                module_upvr.RequestChargeFishingRod = HookRequestChargeFishingRod
+            end
+            
+            if module_upvr.SendFishingRequestToServer and module_upvr.SendFishingRequestToServer ~= HookSendFishingRequestToServer then
+                module_upvr.SendFishingRequestToServer = HookSendFishingRequestToServer
+            end
+            
+            -- Tambahkan fungsi pembersihan ke Trove
+            if BLATANT_MODE_TROVE then
+                BLATANT_MODE_TROVE:Add(function() 
+                    if module_upvr then
+                        if originalFishingRodStarted then
+                            module_upvr.FishingRodStarted = originalFishingRodStarted 
+                        end
+                        if originalRequestChargeFishingRod then
+                            module_upvr.RequestChargeFishingRod = originalRequestChargeFishingRod
+                        end
+                        if originalSendFishingRequestToServer then
+                            module_upvr.SendFishingRequestToServer = originalSendFishingRequestToServer
+                        end
+                    end
+                end)
+            end
+        end
+        
+        -- Jalankan loop Fast Fishing (Spam)
+        if BLATANT_MODE_TROVE then
+            BLATANT_MODE_TROVE:Add(task.spawn(BlatantFishingLoop))
+        end
+        
+        Notify({Title = "⚡ Blatant Fishing", Content = "Fast fishing mode activated - Instant spam casting.", Duration = 3})
+        
+    else
+        isBlatantActive = false
+        print("❌ Blantant Mode (Fast Fishing): DISABLED. Cleaning up...")
+        
+        -- Cleanup
+        if BLATANT_MODE_TROVE then
+            BLATANT_MODE_TROVE:Clean()
+        end
+        
+        -- Restore original functions
+        if module_upvr then
+            if originalFishingRodStarted then
+                module_upvr.FishingRodStarted = originalFishingRodStarted
+            end
+            if originalRequestChargeFishingRod then
+                module_upvr.RequestChargeFishingRod = originalRequestChargeFishingRod
+            end
+            if originalSendFishingRequestToServer then
+                module_upvr.SendFishingRequestToServer = originalSendFishingRequestToServer
+            end
+        end
+        
+        Notify({Title = "Blatant Fishing", Content = "Fast fishing mode deactivated", Duration = 3})
+    end
+    
+    return true
+end
+
+-- Manual fishing function untuk testing
+local function ManualBlatantFish()
+    if not isBlatantActive then
+        Notify({Title = "Blatant Fishing", Content = "Please enable Blatant Mode first", Duration = 3})
+        return
+    end
+    
+    pcall(function()
+        local success = BlatantCastFishingRod()
+        if success then
+            Notify({Title = "⚡ Manual Cast", Content = "Casting fishing rod instantly...", Duration = 2})
+        else
+            Notify({Title = "❌ Manual Cast Failed", Content = "Failed to cast fishing rod", Duration = 2})
+        end
+    end)
 end
 
 -- Network Communication untuk Auto Fishing biasa
@@ -2367,27 +1466,6 @@ local function DestroyCoordinateDisplay()
     end
 end
 
--- Auto-clean money icons
-task.spawn(function()
-    while task.wait(1) do
-        for _, obj in ipairs(CoreGui:GetDescendants()) do
-            if obj and (obj:IsA("ImageLabel") or obj:IsA("ImageButton") or obj:IsA("TextLabel")) then
-                local nameLower = (obj.Name or ""):lower()
-                local textLower = (obj.Text or ""):lower()
-                if string.find(nameLower, "money") or string.find(textLower, "money") or string.find(nameLower, "100") then
-                    pcall(function()
-                        obj.Visible = false
-                        if obj:IsA("GuiObject") then
-                            obj.Active = false
-                            obj.ZIndex = 0
-                        end
-                    end)
-                end
-            end
-        end
-    end
-end)
-
 -- =============================================================================
 -- WINDUI MAIN WINDOW CREATION
 -- =============================================================================
@@ -2501,36 +1579,32 @@ AutoTab:Toggle({
 
 AutoTab:Space()
 
--- Blatant Fishing Section - IMPROVED
+-- Blatant Fishing Section
 AutoTab:Section({
-    Title = "⚡ INSTANT CAST Fishing",
+    Title = "⚡ Blatant Fishing",
     TextSize = 20,
     FontWeight = Enum.FontWeight.SemiBold,
 })
 
 AutoTab:Toggle({
-    Title = "INSTANT CAST Mode",
-    Desc = "No charge animation - Direct spam casting",
+    Title = "Blatant Mode",
+    Desc = "Fast fishing with minigame bypass",
     Flag = "BlatantModeToggle",
     Default = false,
     Callback = function(state)
-        local success = ToggleBlatantMode(state)
-        if not success then
-            -- Reset toggle state jika gagal
-            AutoTab:GetElement("BlatantModeToggle"):Set(false)
-        end
+        ToggleBlatantMode(state)
     end
 })
 
 AutoTab:Slider({
-    Title = "Reel Delay",
-    Desc = "Delay before auto-reeling fish (0 = INSTANT)",
+    Title = "Delay Reel",
+    Desc = "Delay before reeling fish (0 - 1.87)",
     Flag = "BlatantReelDelay",
     Step = 0.01,
     Value = {
         Min = 0,
-        Max = 1.0,
-        Default = 0.1,
+        Max = 1.87,
+        Default = 0.5,
     },
     Callback = function(value)
         SetBlatantReelDelay(value)
@@ -2538,14 +1612,14 @@ AutoTab:Slider({
 })
 
 AutoTab:Slider({
-    Title = "Cast Delay", 
-    Desc = "Delay between instant casts (0 = MAX SPEED)",
+    Title = "Delay Fishing",
+    Desc = "Delay between fishing attempts (Fast Loop)",
     Flag = "BlatantFishingDelay",
     Step = 0.001,
     Value = {
         Min = 0,
         Max = 0.1,
-        Default = 0.02,
+        Default = 0.0015,
     },
     Callback = function(value)
         SetBlatantFishingDelay(value)
@@ -2553,160 +1627,20 @@ AutoTab:Slider({
 })
 
 AutoTab:Button({
-    Title = "Initialize System",
+    Title = "Initialize Blatant System",
     Icon = "zap",
     Callback = function()
-        local success = InitializeBlatantFishing()
-        if success then
-            Notify({Title = "✅ Success", Content = "System initialized!", Duration = 2})
-        end
+        InitializeBlatantFishing()
     end
 })
 
 AutoTab:Button({
-    Title = "Manual Instant Cast",
+    Title = "Manual Cast",
     Icon = "fishing-rod",
     Callback = ManualBlatantFish
 })
 
 AutoTab:Space()
-
--- ========== DRONE CAMERA TAB (Mobile Compatible) ==========
-local DroneTab = Window:Tab({
-    Title = "Drone Camera",
-    Icon = "camera",
-})
-
-DroneTab:Section({
-    Title = "🚁 Drone Camera System",
-    Desc = IS_MOBILE and "Mobile-optimized flying camera" or "Advanced flying camera for recording",
-})
-
-DroneTab:Toggle({
-    Title = "Enable Drone Camera",
-    Desc = IS_MOBILE and "Activate with mobile touch controls" or "Activate free-flying camera mode",
-    Flag = "DroneToggle",
-    Default = false,
-    Callback = function(state)
-        ToggleDroneCamera(state)
-    end
-})
-
-DroneTab:Slider({
-    Title = "Drone Speed",
-    Desc = "Adjust movement speed",
-    Flag = "DroneSpeed",
-    Step = 1,
-    Value = {
-        Min = 10,
-        Max = IS_MOBILE and 80 or 100,
-        Default = IS_MOBILE and 20 or 25,
-    },
-    Callback = function(value)
-        SetDroneSpeed(value)
-    end
-})
-
-DroneTab:Slider({
-    Title = "Boost Speed",
-    Desc = "Adjust boost movement speed",
-    Flag = "DroneBoostSpeed",
-    Step = 1,
-    Value = {
-        Min = 20,
-        Max = IS_MOBILE and 120 or 150,
-        Default = IS_MOBILE and 40 or 50,
-    },
-    Callback = function(value)
-        SetDroneBoostSpeed(value)
-    end
-})
-
-if IS_MOBILE then
-    DroneTab:Slider({
-        Title = "Touch Sensitivity",
-        Desc = "Adjust camera rotation sensitivity",
-        Flag = "TouchSensitivity",
-        Step = 0.1,
-        Value = {
-            Min = 0.5,
-            Max = 5.0,
-            Default = 2.0,
-        },
-        Callback = function(value)
-            SetTouchSensitivity(value)
-        end
-    })
-else
-    DroneTab:Slider({
-        Title = "Mouse Sensitivity",
-        Desc = "Adjust camera rotation sensitivity",
-        Flag = "DroneSensitivity",
-        Step = 0.1,
-        Value = {
-            Min = 0.1,
-            Max = 2.0,
-            Default = 0.5,
-        },
-        Callback = function(value)
-            SetDroneSensitivity(value)
-        end
-    })
-end
-
-DroneTab:Dropdown({
-    Title = "Cinematic Mode",
-    Desc = "Pre-configured camera modes",
-    Flag = "CinematicMode",
-    Values = {"Default", "Cinematic", "Action", "Precision", IS_MOBILE and "Mobile" or nil},
-    Value = IS_MOBILE and "Mobile" or "Default",
-    Callback = function(value)
-        SetCinematicMode(value)
-    end
-})
-
-DroneTab:Button({
-    Title = IS_MOBILE and "Hide/Show Controls" or "Toggle Freecam",
-    Icon = IS_MOBILE and "eye" or "eye",
-    Callback = IS_MOBILE and function()
-        if mobileControlsGui then
-            mobileControlsGui.Enabled = not mobileControlsGui.Enabled
-        end
-    end or ToggleFreecam
-})
-
-DroneTab:Button({
-    Title = "Reset Camera",
-    Icon = "refresh-cw",
-    Callback = function()
-        if droneBodyGyro then
-            droneBodyGyro.CFrame = CFrame.new(droneCamera.Position, droneCamera.Position + Vector3.new(0, 0, -1))
-        end
-    end
-})
-
--- Mobile-specific info
-if IS_MOBILE then
-    DroneTab:Section({
-        Title = "📱 Mobile Controls",
-        Desc = "Virtual joystick and touch controls",
-    })
-    
-    DroneTab:Label({
-        Title = "Left Side: Virtual Joystick",
-        Desc = "Move forward/backward/left/right"
-    })
-    
-    DroneTab:Label({
-        Title = "Right Side: Touch Look",
-        Desc = "Drag to rotate camera view"
-    })
-    
-    DroneTab:Label({
-        Title = "Buttons: Ascend/Descend/Boost",
-        Desc = "Tap buttons for vertical movement"
-    })
-end
 
 -- ========== WEATHER MACHINE TAB ==========
 local WeatherTab = Window:Tab({
@@ -3214,7 +2148,6 @@ SettingsTab:Button({
         StopAutoSell()
         StopAutoTrickTreat()
         ToggleBlatantMode(false)
-        ToggleDroneCamera(false)
         DestroyCoordinateDisplay()
         Window:Destroy()
         Notify({Title = "Unload", Content = "Hub unloaded successfully", Duration = 2})
