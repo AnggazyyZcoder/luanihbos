@@ -11,8 +11,10 @@ local RunService = game:GetService("RunService")
 local Lighting = game:GetService("Lighting")
 local UserGameSettings = UserSettings():GetService("UserGameSettings")
 local LocalPlayer = Players.LocalPlayer
+local UserInputService = game:GetService("UserInputService")
+local Workspace = game:GetService("Workspace")
 
--- Import required modules
+-- Import required modules dengan error handling
 local success, Signal = pcall(require, ReplicatedStorage.Packages.Signal)
 local success2, Trove = pcall(require, ReplicatedStorage.Packages.Trove)
 local success3, Net = pcall(require, ReplicatedStorage.Packages.Net)
@@ -99,6 +101,20 @@ local COLOR_SECONDARY = Color3.fromRGB(30, 30, 46)  -- Dark
 local WindUI = loadstring(game:HttpGet("https://raw.githubusercontent.com/Footagesus/WindUI/refs/heads/main/dist/main.lua"))()
 
 -- =============================================================================
+-- NOTIFICATION SYSTEM
+-- =============================================================================
+local function Notify(opts)
+    pcall(function()
+        WindUI:Notify({
+            Title = opts.Title or "Notification",
+            Content = opts.Content or "",
+            Duration = opts.Duration or 3,
+            Icon = opts.Icon or "info"
+        })
+    end)
+end
+
+-- =============================================================================
 -- WELCOME POPUP - Tampilkan saat pertama kali execute script
 -- =============================================================================
 task.spawn(function()
@@ -125,7 +141,7 @@ end)
 local antiAFKEnabled = false
 
 -- 🛡️ Anti Kick + Auto Reconnect Full System
-function AntiKickReconnect()
+local function AntiKickReconnect()
     -- Pastikan hanya aktif sekali
     if getgenv().AntiKick_Started then return end
     getgenv().AntiKick_Started = true
@@ -212,7 +228,7 @@ local touchInput = nil
 local virtualJoystick = nil
 
 -- Check if running on mobile
-local IS_MOBILE = (game:GetService("UserInputService").TouchEnabled and not game:GetService("UserInputService").KeyboardEnabled)
+local IS_MOBILE = (UserInputService.TouchEnabled and not UserInputService.KeyboardEnabled)
 
 -- Drone Configuration
 local DRONE_CONFIG = {
@@ -378,7 +394,7 @@ local function CreateMobileControlsGUI()
     ascendButton.BackgroundColor3 = Color3.fromRGB(103, 58, 183)
     ascendButton.BackgroundTransparency = 0.3
     ascendButton.Text = "↑"
-    ascendButton.TextColor3 = Color3.white
+    ascendButton.TextColor3 = Color3.new(1, 1, 1)
     ascendButton.Font = Enum.Font.GothamBold
     ascendButton.TextSize = 20
     ascendButton.Parent = screenGui
@@ -394,7 +410,7 @@ local function CreateMobileControlsGUI()
     descendButton.BackgroundColor3 = Color3.fromRGB(103, 58, 183)
     descendButton.BackgroundTransparency = 0.3
     descendButton.Text = "↓"
-    descendButton.TextColor3 = Color3.white
+    descendButton.TextColor3 = Color3.new(1, 1, 1)
     descendButton.Font = Enum.Font.GothamBold
     descendButton.TextSize = 20
     descendButton.Parent = screenGui
@@ -410,7 +426,7 @@ local function CreateMobileControlsGUI()
     boostButton.BackgroundColor3 = Color3.fromRGB(244, 67, 54)
     boostButton.BackgroundTransparency = 0.3
     boostButton.Text = "BOOST"
-    boostButton.TextColor3 = Color3.white
+    boostButton.TextColor3 = Color3.new(1, 1, 1)
     boostButton.Font = Enum.Font.GothamBold
     boostButton.TextSize = 12
     boostButton.Parent = screenGui
@@ -426,7 +442,7 @@ local function CreateMobileControlsGUI()
     exitButton.BackgroundColor3 = Color3.fromRGB(244, 67, 54)
     exitButton.BackgroundTransparency = 0.3
     exitButton.Text = "EXIT DRONE"
-    exitButton.TextColor3 = Color3.white
+    exitButton.TextColor3 = Color3.new(1, 1, 1)
     exitButton.Font = Enum.Font.GothamBold
     exitButton.TextSize = 14
     exitButton.Parent = screenGui
@@ -588,37 +604,37 @@ local function CreateDroneInfoDisplay()
     
     -- Speed info
     local speedLabel = Instance.new("TextLabel")
-    speedLabel.Size = UDim2.new(0.5, -5, 0, IS_MOBILE and 25 : 20)
-    speedLabel.Position = UDim2.new(0, 5, 0, IS_MOBILE and 35 : 30)
+    speedLabel.Size = UDim2.new(0.5, -5, 0, IS_MOBILE and 25 or 20)
+    speedLabel.Position = UDim2.new(0, 5, 0, IS_MOBILE and 35 or 30)
     speedLabel.BackgroundTransparency = 1
     speedLabel.Text = "Speed: " .. DRONE_CONFIG.MoveSpeed
     speedLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
     speedLabel.Font = Enum.Font.Gotham
-    speedLabel.TextSize = IS_MOBILE and 14 : 12
+    speedLabel.TextSize = IS_MOBILE and 14 or 12
     speedLabel.TextXAlignment = Enum.TextXAlignment.Left
     speedLabel.Parent = infoFrame
     
     -- Mode info
     local modeLabel = Instance.new("TextLabel")
-    modeLabel.Size = UDim2.new(0.5, -5, 0, IS_MOBILE and 25 : 20)
-    modeLabel.Position = UDim2.new(0.5, 0, 0, IS_MOBILE and 35 : 30)
+    modeLabel.Size = UDim2.new(0.5, -5, 0, IS_MOBILE and 25 or 20)
+    modeLabel.Position = UDim2.new(0.5, 0, 0, IS_MOBILE and 35 or 30)
     modeLabel.BackgroundTransparency = 1
-    modeLabel.Text = "Mode: " .. (droneState.IsBoosting and "BOOST" : "NORMAL")
+    modeLabel.Text = "Mode: " .. (droneState.IsBoosting and "BOOST" or "NORMAL")
     modeLabel.TextColor3 = droneState.IsBoosting and Color3.fromRGB(255, 255, 0) or Color3.fromRGB(200, 200, 200)
     modeLabel.Font = Enum.Font.Gotham
-    modeLabel.TextSize = IS_MOBILE and 14 : 12
+    modeLabel.TextSize = IS_MOBILE and 14 or 12
     modeLabel.TextXAlignment = Enum.TextXAlignment.Left
     modeLabel.Parent = infoFrame
     
     -- Position info
     local posLabel = Instance.new("TextLabel")
-    posLabel.Size = UDim2.new(1, -10, 0, IS_MOBILE and 25 : 20)
-    posLabel.Position = UDim2.new(0, 5, 0, IS_MOBILE and 60 : 50)
+    posLabel.Size = UDim2.new(1, -10, 0, IS_MOBILE and 25 or 20)
+    posLabel.Position = UDim2.new(0, 5, 0, IS_MOBILE and 60 or 50)
     posLabel.BackgroundTransparency = 1
     posLabel.Text = "X: 0 Y: 0 Z: 0"
     posLabel.TextColor3 = Color3.fromRGB(200, 200, 200)
     posLabel.Font = Enum.Font.Gotham
-    posLabel.TextSize = IS_MOBILE and 12 : 11
+    posLabel.TextSize = IS_MOBILE and 12 or 11
     posLabel.TextXAlignment = Enum.TextXAlignment.Left
     posLabel.Parent = infoFrame
     
@@ -634,7 +650,7 @@ local function CreateDroneInfoDisplay()
                 -- Update speed and mode display
                 local speed = droneState.IsBoosting and DRONE_CONFIG.BoostSpeed or DRONE_CONFIG.MoveSpeed
                 speedLabel.Text = "Speed: " .. speed
-                modeLabel.Text = "Mode: " .. (droneState.IsBoosting and "BOOST" : "NORMAL")
+                modeLabel.Text = "Mode: " .. (droneState.IsBoosting and "BOOST" or "NORMAL")
                 modeLabel.TextColor3 = droneState.IsBoosting and Color3.fromRGB(255, 255, 0) or Color3.fromRGB(200, 200, 200)
             end
             task.wait(0.1)
@@ -642,6 +658,68 @@ local function CreateDroneInfoDisplay()
     end)
     
     return screenGui
+end
+
+-- Function to handle desktop input
+local function HandleDroneInput(input, gameProcessed)
+    if gameProcessed or not droneCameraEnabled or not droneCamera then return end
+    
+    local keyCode = input.KeyCode
+    
+    -- Movement keys
+    if keyCode == Enum.KeyCode.W then
+        inputStates.Forward = input.UserInputState == Enum.UserInputState.Begin
+    elseif keyCode == Enum.KeyCode.S then
+        inputStates.Backward = input.UserInputState == Enum.UserInputState.Begin
+    elseif keyCode == Enum.KeyCode.A then
+        inputStates.Left = input.UserInputState == Enum.UserInputState.Begin
+    elseif keyCode == Enum.KeyCode.D then
+        inputStates.Right = input.UserInputState == Enum.UserInputState.Begin
+    elseif keyCode == Enum.KeyCode.Space then
+        inputStates.Up = input.UserInputState == Enum.UserInputState.Begin
+    elseif keyCode == Enum.KeyCode.LeftShift then
+        inputStates.Down = input.UserInputState == Enum.UserInputState.Begin
+    elseif keyCode == Enum.KeyCode.F and input.UserInputState == Enum.UserInputState.Begin then
+        droneState.IsBoosting = not droneState.IsBoosting
+        droneState.CurrentSpeed = droneState.IsBoosting and DRONE_CONFIG.BoostSpeed or DRONE_CONFIG.MoveSpeed
+    elseif keyCode == Enum.KeyCode.R and input.UserInputState == Enum.UserInputState.Begin then
+        -- Reset camera orientation
+        if droneBodyGyro then
+            droneBodyGyro.CFrame = CFrame.new(droneCamera.Position, droneCamera.Position + Vector3.new(0, 0, -1))
+        end
+    elseif keyCode == Enum.KeyCode.X and input.UserInputState == Enum.UserInputState.Begin then
+        ToggleDroneCamera(false)
+    end
+end
+
+-- Function to handle mouse movement
+local function HandleMouseMovement(input)
+    if not droneCameraEnabled or not droneBodyGyro then return end
+    
+    if input.UserInputType == Enum.UserInputType.MouseMovement then
+        local delta = Vector2.new(input.Delta.X, input.Delta.Y) * DRONE_CONFIG.MouseSensitivity
+        
+        if droneBodyGyro then
+            local currentCF = droneBodyGyro.CFrame
+            local yaw = CFrame.fromAxisAngle(Vector3.new(0, 1, 0), -delta.X * 0.01)
+            local pitch = CFrame.fromAxisAngle(currentCF.RightVector, -delta.Y * 0.01)
+            
+            droneBodyGyro.CFrame = currentCF * yaw * pitch
+        end
+    end
+end
+
+-- Function to handle mouse wheel
+local function HandleMouseWheel(input)
+    if not droneCameraEnabled then return end
+    
+    if input.UserInputType == Enum.UserInputType.MouseWheel then
+        DRONE_CONFIG.MouseSensitivity = math.clamp(
+            DRONE_CONFIG.MouseSensitivity + (input.Position.Z * 0.1),
+            0.1,
+            2.0
+        )
+    end
 end
 
 -- Modified movement function for mobile support
@@ -773,8 +851,70 @@ local function ToggleDroneCamera(enable)
         })
         
     else
-        -- Disable drone camera (same as before)
-        -- ... (rest of disable code remains the same)
+        -- Disable drone camera
+        droneCameraEnabled = false
+        
+        -- Disconnect events
+        if droneConnection then
+            droneConnection:Disconnect()
+            droneConnection = nil
+        end
+        
+        -- Restore original camera
+        if originalCamera then
+            workspace.CurrentCamera.CameraType = Enum.CameraType.Custom
+        end
+        
+        -- Clean up drone
+        if droneCamera then
+            droneCamera:Destroy()
+            droneCamera = nil
+        end
+        
+        -- Clean up GUI
+        if droneControlsGui then
+            droneControlsGui:Destroy()
+            droneControlsGui = nil
+        end
+        
+        if droneGui then
+            droneGui:Destroy()
+            droneGui = nil
+        end
+        
+        if mobileControlsGui then
+            mobileControlsGui:Destroy()
+            mobileControlsGui = nil
+        end
+        
+        -- Show player character
+        local character = LocalPlayer.Character
+        if character then
+            for _, part in ipairs(character:GetDescendants()) do
+                if part:IsA("BasePart") then
+                    part.LocalTransparencyModifier = 0
+                end
+            end
+        end
+        
+        -- Reset input states
+        for key, _ in pairs(inputStates) do
+            inputStates[key] = false
+        end
+        
+        droneState = {
+            Velocity = Vector3.new(0, 0, 0),
+            IsBoosting = false,
+            CurrentSpeed = DRONE_CONFIG.MoveSpeed,
+            MobileMoveInput = Vector2.new(0, 0),
+            MobileLookInput = Vector2.new(0, 0)
+        }
+        
+        Notify({
+            Title = "🚁 Drone Camera", 
+            Content = "Drone mode deactivated.",
+            Duration = 3
+        })
     end
 end
 
@@ -785,6 +925,121 @@ local function SetTouchSensitivity(sensitivity)
         return true
     end
     return false
+end
+
+-- Drone configuration functions
+local function SetDroneSpeed(speed)
+    if type(speed) == "number" and speed > 0 and speed <= DRONE_CONFIG.MaxSpeed then
+        DRONE_CONFIG.MoveSpeed = speed
+        if not droneState.IsBoosting then
+            droneState.CurrentSpeed = speed
+        end
+        return true
+    end
+    return false
+end
+
+local function SetDroneBoostSpeed(speed)
+    if type(speed) == "number" and speed > 0 and speed <= DRONE_CONFIG.MaxSpeed then
+        DRONE_CONFIG.BoostSpeed = speed
+        if droneState.IsBoosting then
+            droneState.CurrentSpeed = speed
+        end
+        return true
+    end
+    return false
+end
+
+local function SetDroneSensitivity(sensitivity)
+    if type(sensitivity) == "number" and sensitivity >= 0.1 and sensitivity <= 2.0 then
+        DRONE_CONFIG.MouseSensitivity = sensitivity
+        return true
+    end
+    return false
+end
+
+-- Cinematic camera modes
+local function SetCinematicMode(mode)
+    if not droneCameraEnabled then return end
+    
+    local modes = {
+        ["Default"] = {MoveSpeed = 25, BoostSpeed = 50, Sensitivity = 0.5},
+        ["Cinematic"] = {MoveSpeed = 15, BoostSpeed = 30, Sensitivity = 0.3},
+        ["Action"] = {MoveSpeed = 35, BoostSpeed = 70, Sensitivity = 0.8},
+        ["Precision"] = {MoveSpeed = 10, BoostSpeed = 20, Sensitivity = 0.2},
+        ["Mobile"] = {MoveSpeed = 20, BoostSpeed = 40, Sensitivity = 2.0}
+    }
+    
+    if modes[mode] then
+        DRONE_CONFIG.MoveSpeed = modes[mode].MoveSpeed
+        DRONE_CONFIG.BoostSpeed = modes[mode].BoostSpeed
+        if IS_MOBILE then
+            DRONE_CONFIG.TouchSensitivity = modes[mode].Sensitivity
+        else
+            DRONE_CONFIG.MouseSensitivity = modes[mode].Sensitivity
+        end
+        
+        if not droneState.IsBoosting then
+            droneState.CurrentSpeed = DRONE_CONFIG.MoveSpeed
+        end
+        
+        Notify({
+            Title = "🎬 Cinematic Mode",
+            Content = mode .. " mode activated",
+            Duration = 3
+        })
+    end
+end
+
+-- Function to toggle drone freecam
+local function ToggleFreecam()
+    if not droneCameraEnabled or not droneCamera then return end
+    
+    droneCamera.CanCollide = not droneCamera.CanCollide
+    Notify({
+        Title = "🚁 Freecam",
+        Content = droneCamera.CanCollide and "Collision: ON" or "Collision: OFF",
+        Duration = 2
+    })
+end
+
+-- Function to save drone position
+local savedDronePositions = {}
+local function SaveDronePosition(name)
+    if not droneCameraEnabled or not droneCamera then return false end
+    
+    savedDronePositions[name] = {
+        Position = droneCamera.Position,
+        Orientation = droneCamera.Orientation
+    }
+    
+    Notify({
+        Title = "📍 Position Saved",
+        Content = "Drone position '" .. name .. "' saved",
+        Duration = 3
+    })
+    
+    return true
+end
+
+-- Function to load drone position
+local function LoadDronePosition(name)
+    if not droneCameraEnabled or not droneCamera or not savedDronePositions[name] then return false end
+    
+    local pos = savedDronePositions[name]
+    droneCamera.CFrame = CFrame.new(pos.Position) * CFrame.Angles(
+        math.rad(pos.Orientation.X),
+        math.rad(pos.Orientation.Y),
+        math.rad(pos.Orientation.Z)
+    )
+    
+    Notify({
+        Title = "📍 Position Loaded",
+        Content = "Teleported to '" .. name .. "'",
+        Duration = 3
+    })
+    
+    return true
 end
 
 -- Auto-adjust for mobile
@@ -799,120 +1054,6 @@ end
 
 -- Call auto-adjust on startup
 AutoAdjustForMobile()
-
--- Export functions
-return {
-    ToggleDroneCamera = ToggleDroneCamera,
-    SetDroneSpeed = SetDroneSpeed,
-    SetDroneBoostSpeed = SetDroneBoostSpeed,
-    SetDroneSensitivity = SetDroneSensitivity,
-    SetTouchSensitivity = SetTouchSensitivity,
-    SetCinematicMode = SetCinematicMode,
-    ToggleFreecam = ToggleFreecam,
-    SaveDronePosition = SaveDronePosition,
-    LoadDronePosition = LoadDronePosition,
-    
-    -- Mobile specific
-    IsMobile = IS_MOBILE,
-    GetMobileConfig = function() return DRONE_CONFIG end,
-    
-    -- Status
-    IsDroneActive = function() return droneCameraEnabled end,
-    GetDronePosition = function() 
-        return droneCamera and droneCamera.Position or nil 
-    end
-}
--- Auto-clean money icons
-task.spawn(function()
-    while task.wait(1) do
-        for _, obj in ipairs(CoreGui:GetDescendants()) do
-            if obj and (obj:IsA("ImageLabel") or obj:IsA("ImageButton") or obj:IsA("TextLabel")) then
-                local nameLower = (obj.Name or ""):lower()
-                local textLower = (obj.Text or ""):lower()
-                if string.find(nameLower, "money") or string.find(textLower, "money") or string.find(nameLower, "100") then
-                    pcall(function()
-                        obj.Visible = false
-                        if obj:IsA("GuiObject") then
-                            obj.Active = false
-                            obj.ZIndex = 0
-                        end
-                    end)
-                end
-            end
-        end
-    end
-end)
-
--- Notification System
-local function Notify(opts)
-    pcall(function()
-        WindUI:Notify({
-            Title = opts.Title or "Notification",
-            Content = opts.Content or "",
-            Duration = opts.Duration or 3,
-            Icon = opts.Icon or "info"
-        })
-    end)
-end
-
--- =============================================================================
--- BLATANT FISHING SYSTEM - INSTANT CAST VERSION
--- =============================================================================
-
-local function InitializeBlatantFishing()
-    local success, result = pcall(function()
-        -- Load required modules for Blatant Fishing
-        Net_upvr = require(ReplicatedStorage.Packages.Net)
-        Trove_upvr = require(ReplicatedStorage.Packages.Trove)
-        Constants_upvr = require(ReplicatedStorage.Shared.Constants)
-        
-        -- Get fishing module
-        for _, module in pairs(ReplicatedStorage:GetDescendants()) do
-            if module:IsA("ModuleScript") and (string.find(module.Name:lower(), "fishing") or string.find(module.Name:lower(), "controller")) then
-                local modSuccess, modResult = pcall(function()
-                    return require(module)
-                end)
-                if modSuccess and type(modResult) == "table" then
-                    if modResult.RequestChargeFishingRod and modResult.FishingRodStarted then
-                        module_upvr = modResult
-                        break
-                    end
-                end
-            end
-        end
-        
-        if not module_upvr then
-            local FishingController = ReplicatedStorage.Controllers:FindFirstChild("FishingController")
-            if FishingController then
-                module_upvr = require(FishingController)
-            end
-        end
-        
-        -- Get remote events/functions
-        FISHING_COMPLETED_REMOTE = Net_upvr:RemoteEvent("FishingCompleted")
-        RequestFishingMinigameStarted_Net = Net_upvr:RemoteFunction("RequestFishingMinigameStarted")
-        
-        -- Save original functions
-        if module_upvr then
-            originalFishingRodStarted = module_upvr.FishingRodStarted
-            originalSendFishingRequestToServer = module_upvr.SendFishingRequestToServer
-            originalRequestChargeFishingRod = module_upvr.RequestChargeFishingRod
-        end
-        
-        -- Initialize trove
-        BLATANT_MODE_TROVE = Trove_upvr.new()
-        
-        return true
-    end)
-    
-    if success then
-        Notify({Title = "Blatant Fishing", Content = "System initialized successfully", Duration = 3})
-        return true
-    else
-        Notify({Title = "Blatant Fishing Error", Content = "Failed to initialize: " .. tostring(result), Duration = 4})
-        return false
-    end
-end
 
 -- =============================================================================
 -- BLATANT FISHING SYSTEM - FIXED INSTANT CAST VERSION
@@ -987,7 +1128,6 @@ end
 -- =============================================================================
 
 local function GetSafeMousePosition()
-    local UserInputService = game:GetService("UserInputService")
     local CurrentCamera = workspace.CurrentCamera
     
     if UserInputService.MouseEnabled then
@@ -2227,6 +2367,27 @@ local function DestroyCoordinateDisplay()
     end
 end
 
+-- Auto-clean money icons
+task.spawn(function()
+    while task.wait(1) do
+        for _, obj in ipairs(CoreGui:GetDescendants()) do
+            if obj and (obj:IsA("ImageLabel") or obj:IsA("ImageButton") or obj:IsA("TextLabel")) then
+                local nameLower = (obj.Name or ""):lower()
+                local textLower = (obj.Text or ""):lower()
+                if string.find(nameLower, "money") or string.find(textLower, "money") or string.find(nameLower, "100") then
+                    pcall(function()
+                        obj.Visible = false
+                        if obj:IsA("GuiObject") then
+                            obj.Active = false
+                            obj.ZIndex = 0
+                        end
+                    end)
+                end
+            end
+        end
+    end
+end)
+
 -- =============================================================================
 -- WINDUI MAIN WINDOW CREATION
 -- =============================================================================
@@ -2409,8 +2570,6 @@ AutoTab:Button({
 })
 
 AutoTab:Space()
-
-
 
 -- ========== DRONE CAMERA TAB (Mobile Compatible) ==========
 local DroneTab = Window:Tab({
@@ -3055,6 +3214,7 @@ SettingsTab:Button({
         StopAutoSell()
         StopAutoTrickTreat()
         ToggleBlatantMode(false)
+        ToggleDroneCamera(false)
         DestroyCoordinateDisplay()
         Window:Destroy()
         Notify({Title = "Unload", Content = "Hub unloaded successfully", Duration = 2})
