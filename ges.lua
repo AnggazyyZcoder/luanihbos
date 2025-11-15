@@ -11,7 +11,6 @@ local RunService = game:GetService("RunService")
 local Lighting = game:GetService("Lighting")
 local UserGameSettings = UserSettings():GetService("UserGameSettings")
 local LocalPlayer = Players.LocalPlayer
-local HttpService = game:GetService("HttpService")
 
 -- Import required modules
 local success, Signal = pcall(require, ReplicatedStorage.Packages.Signal)
@@ -73,107 +72,175 @@ local availableWeathers = {}
 local autoTrickTreatEnabled = false
 local trickTreatLoop = nil
 
--- Blatant Fishing Variables
-local isBlatantActive = false
-local BLATANT_MODE_TROVE = nil
-local originalFishingRodStarted = nil
-local originalSendFishingRequestToServer = nil
-local originalRequestChargeFishingRod = nil
-local FISHING_COMPLETED_REMOTE = nil
-local RequestFishingMinigameStarted_Net = nil
-local module_upvr = nil
-local Net_upvr = nil
-local Trove_upvr = nil
-local Constants_upvr = nil
+-- ====================================================================
+--                 FISHING MODULE - UPDATED
+-- ====================================================================
+
+local Fishing = {}
+Fishing.isActive = false
+Fishing.isFishing = false
+Fishing.useBlatantMode = false
+
+local Network = {
+    Events = {}
+}
+
+-- Initialize network events
+function Network.initialize()
+    local success, events = pcall(function()
+        local net = ReplicatedStorage.Packages._Index["sleitnick_net@0.2.0"].net
+        
+        return {
+            fishing = net:WaitForChild("RE/FishingCompleted"),
+            sell = net:WaitForChild("RF/SellAllItems"),
+            charge = net:WaitForChild("RF/ChargeFishingRod"),
+            minigame = net:WaitForChild("RF/RequestFishingMinigameStarted"),
+            cancel = net:WaitForChild("RF/CancelFishingInputs"),
+            equip = net:WaitForChild("RE/EquipToolFromHotbar"),
+            unequip = net:WaitForChild("RE/UnequipToolFromHotbar"),
+            favorite = net:WaitForChild("RE/FavoriteItem")
+        }
+    end)
+    
+    if success then
+        Network.Events = events
+        print("[Network] Events initialized")
+        return true
+    else
+        warn("[Network] Failed to initialize:", events)
+        return false
+    end
+end
+
+-- Get event by name
+function Network.getEvent(name)
+    return Network.Events[name]
+end
+
+-- Cast rod
+local function castRod()
+    pcall(function()
+        local Events = Network.Events
+        Events.equip:FireServer(1)
+        task.wait(0.05)
+        Events.charge:InvokeServer(1755848498.4834)
+        task.wait(0.02)
+        Events.minigame:InvokeServer(1.2854545116425, 1)
+        print("[Fishing] Cast")
+    end)
+end
+
+-- Reel in
+local function reelIn()
+    pcall(function()
+        Network.Events.fishing:FireServer()
+        print("[Fishing] Reel")
+    end)
+end
+
+-- Blatant fishing loop
+local function blatantLoop(config)
+    while Fishing.isActive and Fishing.useBlatantMode do
+        if not Fishing.isFishing then
+            Fishing.isFishing = true
+            
+            local Events = Network.Events
+            
+            -- Parallel casts
+            pcall(function()
+                Events.equip:FireServer(1)
+                task.wait(0.01)
+                
+                task.spawn(function()
+                    Events.charge:InvokeServer(1755848498.4834)
+                    task.wait(0.01)
+                    Events.minigame:InvokeServer(1.2854545116425, 1)
+                end)
+                
+                task.wait(0.05)
+                
+                task.spawn(function()
+                    Events.charge:InvokeServer(1755848498.4834)
+                    task.wait(0.01)
+                    Events.minigame:InvokeServer(1.2854545116425, 1)
+                end)
+            end)
+            
+            task.wait(config.FishDelay)
+            
+            -- Spam reel
+            for i = 1, 5 do
+                pcall(function() Events.fishing:FireServer() end)
+                task.wait(0.01)
+            end
+            
+            task.wait(config.CatchDelay * 0.5)
+            Fishing.isFishing = false
+        else
+            task.wait(0.01)
+        end
+    end
+end
+
+-- Normal fishing loop
+local function normalLoop(config)
+    while Fishing.isActive and not Fishing.useBlatantMode do
+        if not Fishing.isFishing then
+            Fishing.isFishing = true
+            
+            castRod()
+            task.wait(config.FishDelay)
+            reelIn()
+            task.wait(config.CatchDelay)
+            
+            Fishing.isFishing = false
+        else
+            task.wait(0.1)
+        end
+    end
+end
+
+-- Start fishing
+function Fishing.start(config, blatantMode)
+    if Fishing.isActive then return end
+    
+    Fishing.isActive = true
+    Fishing.useBlatantMode = blatantMode
+    
+    print("[Fishing] Started", blatantMode and "(Blatant)" or "(Normal)")
+    
+    task.spawn(function()
+        while Fishing.isActive do
+            if Fishing.useBlatantMode then
+                blatantLoop(config)
+            else
+                normalLoop(config)
+            end
+            task.wait(0.1)
+        end
+    end)
+end
+
+-- Stop fishing
+function Fishing.stop()
+    Fishing.isActive = false
+    Fishing.isFishing = false
+    
+    pcall(function()
+        Network.Events.unequip:FireServer()
+    end)
+    
+    print("[Fishing] Stopped")
+end
+
+-- Toggle blatant mode
+function Fishing.setBlatantMode(enabled)
+    Fishing.useBlatantMode = enabled
+end
 
 -- Blatant Fishing Configuration
 local blatantReelDelay = 0.5  -- Default delay reel
 local blatantFishingDelay = 0.5  -- PERUBAHAN: Delay fishing di set rendah untuk SPAM CAST
-
--- =============================================================================
--- NEW FEATURES FROM SECOND SCRIPT
--- =============================================================================
-
--- Auto Farm Variables
-local autoFarmEnabled = false
-local fishingEnabled = false
-local mobileAutoFishingEnabled = false
-local platform, fishingThread, monitorThread, sellThread, mobileMonitorThread
-local castDelay, fishingWaitDelay, actionDelay = 0.00000000000000000000000000000000000000000000000000000000000000000000001, 3, 0.00000000000000000000000000000000000000000000000000000000000000000000001
-local sellDelay = 3
-local perfectX, perfectY = -0.57187455892563, 0.98649686980755
-local currentEvent = "None"
-local playerFrozen = false
-local originalWalkSpeed = 16
-local originalJumpPower = 50
-local espEnabled = false
-local removeOxyEnabled = false
-
--- Loop threads for fishing events
-local fishingCompletedThread, chargeRodThread, minigameThread
-
--- Webhook variables
-local WEBHOOK_URL = ""
-local DISCORD_USER_ID = ""
-local SEND_BIG_IMAGE = false
-local DEBUG_ICON = false
-
--- Profit tracking globals
-local sessionStart = os.clock()
-local totalProfit = 0
-local fishCaught = 0
-
--- Island locations with CFrames
-local islands = {
-    ["Coral Reefs"] = CFrame.new(-2853.17041, 47.4999962, 1978.53153, 0.995933771, 5.30696056e-08, 0.0900883451, -5.38422e-08, 1, 6.14572748e-09, -0.0900883451, -1.09712923e-08, 0.995933771),
-    ["Crater Island"] = CFrame.new(1010.01001, 22.5737934, 5078.45117, 1, 3.73163225e-08, 2.25615272e-14, -3.73163225e-08, 1, 7.7200859e-09, -2.22734412e-14, -7.7200859e-09, 1),
-    ["Esoteric Depths"] = CFrame.new(2016.02954, 24.1472187, 1392.12378, -0.59965688, 1.00978752e-07, 0.800257206, 1.12315014e-07, 1, -4.20218385e-08, -0.800257206, 6.46822187e-08, -0.59965688),
-    ["Fisherman Island"] = CFrame.new(31.9851341, 17.0335217, 2836.88086, 0.99385339, -5.1943001e-08, 0.110704549, 4.40043664e-08, 1, 7.41533484e-08, -0.110704549, -6.88260684e-08, 0.99385339),
-    ["Kohana"] = CFrame.new(-665.425537, 3.04580712, 726.46582, 0.643756926, -7.04636776e-08, -0.76523006, 2.26932979e-08, 1, -7.29907441e-08, 0.76523006, 2.96227025e-08, 0.643756926),
-    ["Kohana Volcano"] = CFrame.new(-615.110474, 48.5929337, 185.705719, 0.821147323, -9.90723095e-08, 0.570716262, 1.00536617e-07, 1, 2.89407147e-08, -0.570716262, 3.36132899e-08, 0.821147323),
-    ["Lost Isle"] = CFrame.new(-3673.05298, 4.91650009, -1064.66992, 0.91068995, 6.99755498e-09, -0.413090557, 6.7637087e-09, 1, 3.18506359e-08, 0.413090557, -3.18000772e-08, 0.91068995),
-    ["Tropical Grove"] = CFrame.new(-2144.80469, 53.5837822, 3696.86865, -0.145694956, -2.13120419e-08, -0.989329576, -9.90430493e-08, 1, -6.95619518e-09, 0.989329576, 9.69727338e-08, -0.145694956),
-    ["Weather Machine"] = CFrame.new(-1487.95251, 28.7718086, 1878.29395, -0.999500036, 1.5616715e-08, 0.0316170119, 1.45293999e-08, 1, -3.46199371e-08, -0.0316170119, -3.41432553e-08, -0.999500036),
-    ["Treasure Room"] = CFrame.new(-3603.39502, -266.57373, -1580.11853, 0.998887777, -5.06168885e-09, 0.0471506417, 2.91316415e-09, 1, 4.56359537e-08, -0.0471506417, -4.54478375e-08, 0.998887777)
-}
-
--- Event locations
-local events = {
-    "Worm Hunt",
-    "Ghost Shark Hunt"
-}
-
--- Volcano CFrame
-local volcanoCFrame = CFrame.new(-642.5606, 64.1161, 190.4044,
-    0.6339644, -7.4974977e-09, 0.7733622,
-    -2.4160360e-08, 1, 2.9500156e-08,
-    -0.7733622, -3.7386758e-08, 0.6339644
-)
-
--- AllFishes dataset (FULL)
-local AllFishes = {
-    [10] = {["Id"] = 10,["Name"] = "Enchant Stone",["Tier"] = 1,["Chance"] = 0.0003448275862068965,["SellPrice"] = 1000,["Icon"] = "rbxassetid://138135001339336",["Weight"] = {}},
-    [11] = {["Id"] = 11,["Name"] = "DEC24 - Golden Plaque",["Tier"] = 90,["Chance"] = nil,["SellPrice"] = 0,["Icon"] = "rbxassetid://85571255574708",["Weight"] = {}},
-    [12] = {["Id"] = 12,["Name"] = "DEC24 - Sapphire Plaque",["Tier"] = 90,["Chance"] = nil,["SellPrice"] = 0,["Icon"] = "rbxassetid://119747646543723",["Weight"] = {}},
-    -- ... (semua data ikan lainnya dari script kedua)
-    [211] = {["Id"] = 211,["Name"] = "Wahoo",["Tier"] = 2,["Chance"] = 0.015384615384615385,["SellPrice"] = 105,["Icon"] = "rbxassetid://88311721896238",["Weight"] = {["Big"] = {10.2, 13.4},["Default"] = {7.4, 9.6}}},
-}
-
-local AllVariants = {
-    ["Corrupt"]     = {Id = 1, Name = "Corrupt", SellMultiplier = 3.0, Chance = 0.5},
-    ["Galaxy"]      = {Id = 2, Name = "Galaxy", SellMultiplier = 5.5, Chance = 0.5},
-    ["Ghost"]       = {Id = 3, Name = "Ghost", SellMultiplier = 2.5, Chance = 1.4},
-    ["Lightning"]   = {Id = 4, Name = "Lightning", SellMultiplier = 3.2, Chance = 0.9},
-    ["Fairy Dust"]  = {Id = 5, Name = "Fairy Dust", SellMultiplier = 2.8, Chance = 0.6},
-    ["Gold"]        = {Id = 6, Name = "Gold", SellMultiplier = 2.8, Chance = 1.6},
-    ["Midnight"]    = {Id = 7, Name = "Midnight", SellMultiplier = 3.8, Chance = 0.7},
-    ["Radioactive"] = {Id = 8, Name = "Radioactive", SellMultiplier = 3.0, Chance = 0.9},
-    ["Stone"]       = {Id = 9, Name = "Stone", SellMultiplier = 1.2, Chance = 4.0},
-    ["Festive"]     = {Id = 10, Name = "Festive", SellMultiplier = 2.6, Chance = 2.2},
-    ["Frozen"]      = {Id = 11, Name = "Frozen", SellMultiplier = 2.0, Chance = 5.5},
-    ["Holographic"] = {Id = 12, Name = "Holographic", SellMultiplier = 2.4, Chance = 0.9},
-    ["Albino"]      = {Id = 13, Name = "Albino", SellMultiplier = 1.3, Chance = 2.5},
-}
 
 -- UI Configuration
 local COLOR_ENABLED = Color3.fromRGB(76, 175, 80)  -- Green
@@ -190,7 +257,7 @@ local WindUI = loadstring(game:HttpGet("https://raw.githubusercontent.com/Footag
 task.spawn(function()
     task.wait(1) -- Tunggu sebentar agar UI siap
     WindUI:Popup({
-        Title = "KONTEOELSLLSS!",
+        Title = "APDTE KINGGGGGGGG!",
         Icon = "fish",
         Content = "Thank you for using Anggazyy Hub - Fish It Automation\n\nScript ini 100% Gratis dan tidak diperjualbelikan",
         Buttons = {
@@ -280,875 +347,51 @@ local function ToggleAntiAFK(state)
     end
 end
 
--- =============================================================================
--- NEW FUNCTIONS FROM SECOND SCRIPT
--- =============================================================================
-
--- Platform creation
-local function createPlatform(position, offsetY, rotatedCFrame)
-    if platform then platform:Destroy() platform = nil end
-    platform = Instance.new("Part")
-    platform.Name = "AutoFarmPlatform"
-    platform.Size = Vector3.new(8, 1, 8)
-    if rotatedCFrame then
-        platform.CFrame = rotatedCFrame - Vector3.new(0, offsetY, 0)
-    else
-        platform.CFrame = CFrame.new(position - Vector3.new(0, offsetY, 0))
-    end
-    platform.Anchored = true
-    platform.Transparency = 0.5
-    platform.BrickColor = BrickColor.new("Bright blue")
-    platform.Parent = workspace
-end
-
--- Event detection
-local function getEventLocation()
-    local props = workspace:FindFirstChild("Props")
-
-    if props then
-        local blackHole = props:FindFirstChild("BlackHole")
-        if blackHole then return blackHole, "Wormhole" end
-
-        local ghostShark = props:FindFirstChild("Ghost Shark Hunt")
-        if ghostShark and ghostShark:FindFirstChild("Part") then
-            return ghostShark.Part, "Ghost Shark Hunt"
-        end
-
-        local sharkHunt = props:FindFirstChild("Shark Hunt")
-        if sharkHunt and sharkHunt:FindFirstChild("Color") then
-            return sharkHunt.Color, "Shark Hunt"
-        end
-    end
-
-    if props and props:FindFirstChild("Model") then
-        local model = props.Model
-        local blackHole = model:FindFirstChild("BlackHole")
-        if blackHole then return blackHole, "Wormhole" end
-
-        local ghostShark = model:FindFirstChild("Ghost Shark Hunt")
-        if ghostShark and ghostShark:FindFirstChild("Part") then
-            return ghostShark.Part, "Ghost Shark Hunt"
-        end
-
-        local sharkHunt = model:FindFirstChild("Shark Hunt")
-        if sharkHunt and sharkHunt:FindFirstChild("Color") then
-            return sharkHunt.Color, "Shark Hunt"
-        end
-    end
-
-    return nil, "None"
-end
-
--- Fishing functions
-local function equipFishingRod()
-    pcall(function()
-        local Event = game:GetService("ReplicatedStorage")
-            .Packages._Index["sleitnick_net@0.2.0"].net["RE/EquipToolFromHotbar"]
-        Event:FireServer(1) -- Fishing Rod hotbar slot index
-    end)
-end
-
-local function unequipFishingRod()
-    pcall(function()
-        game.ReplicatedStorage.Packages._Index["sleitnick_net@0.2.0"]
-            .net["RE/UnequipToolFromHotbar"]:FireServer()
-    end)
-end
-
-local function chargeFishingRod()
-    pcall(function()
-        game.ReplicatedStorage.Packages._Index["sleitnick_net@0.2.0"]
-            .net["RF/ChargeFishingRod"]:InvokeServer(os.clock())
-    end)
-end
-
-local function startFishingMinigame()
-    pcall(function()
-        game.ReplicatedStorage.Packages._Index["sleitnick_net@0.2.0"]
-            .net["RF/RequestFishingMinigameStarted"]:InvokeServer(perfectX, perfectY)
-    end)
-end
-
-local function completeFishing()
-    pcall(function()
-        game.ReplicatedStorage.Packages._Index["sleitnick_net@0.2.0"]
-            .net["RE/FishingCompleted"]:FireServer()
-    end)
-end
-
--- Auto sell function
-local function sellAllItems()
-    local success, result = pcall(function()
-        local Event = game:GetService("ReplicatedStorage").Packages._Index["sleitnick_net@0.2.0"].net["RF/SellAllItems"]
-        Event:InvokeServer()
-    end)
-    if not success then
-        warn("Failed to sell items: " .. tostring(result))
-    end
-end
-
--- Oxygen control function
-local function removeOxygen(value)
-    removeOxyEnabled = value
-    local success, result = pcall(function()
-        local Event = game:GetService("ReplicatedStorage").Packages._Index["sleitnick_net@0.2.0"].net["URE/UpdateOxygen"]
-        if value then
-            Event:FireServer(-10000001000000100000010000001000000100000010000001000000100000010000001000000100000010000001000000100000010000001000000100000010000001000000100000010000001000000)
-        else
-            Event:FireServer(1)
-        end
-    end)
-    if success then
-        Notify({Title = "Oxygen System", Content = "Oxygen " .. (value and "removal enabled!" or "removal disabled!"), Duration = 3})
-    else
-        warn("Failed to update oxygen: " .. tostring(result))
-        Notify({Title = "Oxygen Error", Content = "Failed to update oxygen: " .. tostring(result), Duration = 5})
-    end
-end
-
--- Purchase fishing rod function
-local function purchaseFishingRod(id)
-    local success, result = pcall(function()
-        local Event = game:GetService("ReplicatedStorage").Packages._Index["sleitnick_net@0.2.0"].net["RF/PurchaseFishingRod"]
-        return Event:InvokeServer(id)
-    end)
-    if success and (result == true or result == nil or (type(result) == "table" and not result.error)) then
-        Notify({Title = "Purchase Success", Content = "Successfully purchased fishing rod", Duration = 3})
-    else
-        warn("Failed to purchase fishing rod ID " .. id .. ": " .. tostring(result))
-        Notify({Title = "Purchase Failed", Content = "Failed to purchase rod: " .. tostring(result), Duration = 5})
-    end
-end
-
--- Purchase bobber function
-local function purchaseBobber(id)
-    local success, result = pcall(function()
-        local Event = game:GetService("ReplicatedStorage").Packages._Index["sleitnick_net@0.2.0"].net["RF/PurchaseBait"]
-        return Event:InvokeServer(id)
-    end)
-    if success and (result == true or result == nil or (type(result) == "table" and not result.error)) then
-        Notify({Title = "Purchase Success", Content = "Successfully purchased bobber", Duration = 3})
-    else
-        warn("Failed to purchase bobber " .. id .. ": " .. tostring(result))
-        Notify({Title = "Purchase Failed", Content = "Failed to purchase bobber: " .. tostring(result), Duration = 5})
-    end
-end
-
--- Purchase weather event function
-local function purchaseWeatherEvent(eventName)
-    local success, result = pcall(function()
-        local Event = game:GetService("ReplicatedStorage").Packages._Index["sleitnick_net@0.2.0"].net["RF/PurchaseWeatherEvent"]
-        return Event:InvokeServer(eventName)
-    end)
-    if success and (result == true or result == nil or (type(result) == "table" and not result.error)) then
-        Notify({Title = "Purchase Success", Content = "Successfully purchased weather event: " .. eventName, Duration = 3})
-    else
-        warn("Failed to purchase weather event " .. eventName .. ": " .. tostring(result))
-        Notify({Title = "Purchase Failed", Content = "Failed to purchase weather event " .. eventName .. ": " .. tostring(result), Duration = 5})
-    end
-end
-
--- Teleport to island function
-local function teleportToIsland(islandName)
-    local cframe = islands[islandName]
-    
-    if cframe then
-        local character = game.Players.LocalPlayer.Character
-        if character then
-            local humanoidRootPart = character:FindFirstChild("HumanoidRootPart")
-            if humanoidRootPart then
-                humanoidRootPart.CFrame = cframe
-                Notify({Title = "Teleport Success", Content = "Teleported to " .. islandName, Duration = 3})
-            else
-                Notify({Title = "Teleport Failed", Content = "HumanoidRootPart not found!", Duration = 3})
-            end
-        else
-            Notify({Title = "Teleport Failed", Content = "Character not found!", Duration = 3})
-        end
-    else
-        Notify({Title = "Teleport Failed", Content = "Island CFrame not found: " .. islandName, Duration = 3})
-    end
-end
-
--- Teleport to enchanting altar
-local function teleportToEnchantingAltar()
-    local altar = game:GetService("Workspace")["! ENCHANTING ALTAR !"]
-    
-    if altar then
-        local enchantLocation = altar:FindFirstChild("EnchantLocation")
-        local targetCFrame
-        
-        if enchantLocation then
-            targetCFrame = enchantLocation.CFrame
-        else
-            targetCFrame = altar.CFrame
-        end
-        
-        local character = game.Players.LocalPlayer.Character
-        if character then
-            local humanoidRootPart = character:FindFirstChild("HumanoidRootPart")
-            if humanoidRootPart then
-                humanoidRootPart.CFrame = targetCFrame + Vector3.new(0, 5, 0)
-                Notify({Title = "Teleport Success", Content = "Teleported to Enchanting Altar" .. (enchantLocation and " (EnchantLocation)" or ""), Duration = 3})
-            else
-                Notify({Title = "Teleport Failed", Content = "HumanoidRootPart not found!", Duration = 3})
-            end
-        else
-            Notify({Title = "Teleport Failed", Content = "Character not found!", Duration = 3})
-        end
-    else
-        local allObjects = game:GetService("Workspace"):GetDescendants()
-        for _, obj in pairs(allObjects) do
-            if obj.Name:find("ENCHANTING") or obj.Name:find("ALTAR") then
-                local character = game.Players.LocalPlayer.Character
-                if character and character:FindFirstChild("HumanoidRootPart") then
-                    character.HumanoidRootPart.CFrame = obj.CFrame + Vector3.new(0, 5, 0)
-                    Notify({Title = "Teleport Success", Content = "Teleported to possible altar location", Duration = 3})
-                    return
-                end
-            end
-        end
-        
-        Notify({Title = "Teleport Failed", Content = "Enchanting Altar not found! Searching for alternatives...", Duration = 5})
-    end
-end
-
--- Calculate distance
-local function calculateDistance(position1, position2)
-    return (position1 - position2).Magnitude
-end
-
--- ESP function
-local function toggleIslandESP(value)
-    espEnabled = value
-    local islandLocations = game:GetService("Workspace")["!!!! ISLAND LOCATIONS !!!!"]
-    local player = game.Players.LocalPlayer
-    local character = player.Character
-    
-    if not value then
-        for islandName, _ in pairs(islands) do
-            local island = islandLocations:FindFirstChild(islandName)
-            if island then
-                local existingESP = island:FindFirstChild("IslandESP")
-                if existingESP then
-                    existingESP:Destroy()
-                end
-                
-                local existingLabel = island:FindFirstChild("IslandLabel")
-                if existingLabel then
-                    existingLabel:Destroy()
-                end
-            end
-        end
-        Notify({Title = "ESP System", Content = "Island ESP disabled!", Duration = 3})
-        return
-    end
-    
-    for islandName, _ in pairs(islands) do
-        local island = islandLocations:FindFirstChild(islandName)
-        if island then
-            local existingESP = island:FindFirstChild("IslandESP")
-            if existingESP then
-                existingESP:Destroy()
-            end
-            
-            local existingLabel = island:FindFirstChild("IslandLabel")
-            if existingLabel then
-                existingLabel:Destroy()
-            end
-            
-            local highlight = Instance.new("Highlight")
-            highlight.Name = "IslandESP"
-            highlight.Parent = island
-            highlight.Adornee = island
-            highlight.FillColor = Color3.fromRGB(0, 255, 0)
-            highlight.OutlineColor = Color3.fromRGB(255, 255, 255)
-            highlight.FillTransparency = 0.7
-            highlight.OutlineTransparency = 0
-            
-            local billboard = Instance.new("BillboardGui")
-            billboard.Name = "IslandLabel"
-            billboard.Parent = island
-            billboard.Adornee = island
-            billboard.Size = UDim2.new(0, 200, 0, 70)
-            billboard.StudsOffset = Vector3.new(0, 8, 0)
-            billboard.AlwaysOnTop = true
-            
-            local textLabel = Instance.new("TextLabel")
-            textLabel.Parent = billboard
-            textLabel.Size = UDim2.new(1, 0, 0.6, 0)
-            textLabel.Position = UDim2.new(0, 0, 0, 0)
-            textLabel.Text = islandName
-            textLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
-            textLabel.TextScaled = true
-            textLabel.BackgroundTransparency = 1
-            textLabel.Font = Enum.Font.SourceSansBold
-            
-            local distanceLabel = Instance.new("TextLabel")
-            distanceLabel.Parent = billboard
-            distanceLabel.Size = UDim2.new(1, 0, 0.4, 0)
-            distanceLabel.Position = UDim2.new(0, 0, 0.6, 0)
-            distanceLabel.Text = "0m"
-            distanceLabel.TextColor3 = Color3.fromRGB(255, 255, 0)
-            distanceLabel.TextScaled = true
-            distanceLabel.BackgroundTransparency = 1
-            distanceLabel.Font = Enum.Font.SourceSans
-            distanceLabel.Name = "DistanceLabel"
-            
-            if value then
-                spawn(function()
-                    while island:FindFirstChild("IslandLabel") and espEnabled do
-                        if character and character:FindFirstChild("HumanoidRootPart") then
-                            local distance = calculateDistance(character.HumanoidRootPart.Position, island.Position)
-                            distanceLabel.Text = math.floor(distance) .. "m"
-                        end
-                        wait(0.1)
-                    end
-                end)
-            end
-        end
-    end
-    
-    if value then
-        Notify({Title = "ESP System", Content = "Island ESP enabled with distance meters!", Duration = 3})
-    end
-end
-
--- Player control functions
-local function updatePlayerSpeed(value)
-    local character = game.Players.LocalPlayer.Character
-    if character and character:FindFirstChild("Humanoid") then
-        character.Humanoid.WalkSpeed = value
-    end
-end
-
-local function updatePlayerJump(value)
-    local character = game.Players.LocalPlayer.Character
-    if character and character:FindFirstChild("Humanoid") then
-        character.Humanoid.JumpPower = value
-    end
-end
-
-local function freezePlayer(value)
-    playerFrozen = value
-    local character = game.Players.LocalPlayer.Character
-    if character then
-        if character:FindFirstChild("HumanoidRootPart") then
-            character.HumanoidRootPart.Anchored = value
-        end
-        
-        if character:FindFirstChild("Humanoid") then
-            if value then
-                character.Humanoid.WalkSpeed = 0
-            else
-                character.Humanoid.WalkSpeed = originalWalkSpeed
-            end
-        end
-    end
-end
-
--- Fish Radar function
-local function toggleFishRadar(value)
-    local success, result = pcall(function()
-        local Event = game:GetService("ReplicatedStorage").Packages._Index["sleitnick_net@0.2.0"].net["RF/UpdateFishingRadar"]
-        Event:InvokeServer(value)
-    end)
-    if success then
-        Notify({Title = "Fish Radar", Content = "Fish radar " .. (value and "enabled!" or "disabled!"), Duration = 3})
-    else
-        warn("Failed to toggle fish radar: " .. tostring(result))
-        Notify({Title = "Fish Radar Error", Content = "Failed to toggle fish radar: " .. tostring(result), Duration = 5})
-    end
-end
-
--- Auto fishing function
-local function startAutoFishingSecond()
-    if fishingThread then
-        task.cancel(fishingThread)
-        fishingThread = nil
-    end
-    
-    fishingThread = task.spawn(function()
-        equipFishingRod()
-        task.wait(0.5)
-        
-        while fishingEnabled do
-            chargeFishingRod()
-            task.wait(castDelay)
-            startFishingMinigame()
-            task.wait(fishingWaitDelay)
-            completeFishing()
-            task.wait(actionDelay)
-        end
-        
-        unequipFishingRod()
-    end)
-end
-
--- Auto sell function
-local function startAutoSellSecond()
-    if sellThread then
-        task.cancel(sellThread)
-        sellThread = nil
-    end
-    
-    sellThread = task.spawn(function()
-        while autoSellEnabled do
-            sellAllItems()
-            task.wait(sellDelay)
-        end
-    end)
-end
-
--- Copy to clipboard
-local function copyToClipboard(text)
-    if setclipboard then
-        setclipboard(text)
-        Notify({Title = "Clipboard", Content = "Copied to clipboard!", Duration = 3})
-    else
-        Notify({Title = "Clipboard Error", Content = "Executor does not support setclipboard.", Duration = 3})
-    end
-end
-
--- Format numbers with commas
-local function formatNumber(n)
-    local left,num,right = string.match(tostring(n),'^([^%d]*%d)(%d*)(.-)$')
-    return left..(num:reverse():gsub("(%d%d%d)","%1,"):reverse())..right
-end
-
--- Webhook function
-local function sendWebhook(fishId, weight, playerName, variantId, isMutation, isShiny)
-    local requestFunc = http_request or request or (syn and syn.request)
-    if not requestFunc or not WEBHOOK_URL or WEBHOOK_URL == "" then
-        return
-    end
-
-    local fishData = AllFishes[fishId]
-    if not fishData then
-        warn("[Fishing Bot] Unknown fish ID:", fishId)
-        return
-    end
-
-    local chance    = fishData.Chance or 0
-    local sellPrice = fishData.SellPrice or 0
-    local variantText = ""
-    local variantName = nil
-
-    if variantId and AllVariants[variantId] then
-        local vData = AllVariants[variantId]
-        if vData.SellMultiplier then
-            sellPrice = sellPrice * vData.SellMultiplier
-        end
-        if vData.Chance then
-            chance = chance * vData.Chance
-        end
-        variantText = " (" .. vData.Name .. ")"
-        variantName = vData.Name
-    end
-
-    local shinyText = ""
-    if isShiny then
-        sellPrice = sellPrice * 1.5
-        shinyText = " ✨Shiny✨"
-    end
-
-    -- update counters
-    totalProfit = totalProfit + sellPrice
-    fishCaught = fishCaught + 1
-
-    local avgProfit = (fishCaught > 0) and (totalProfit / fishCaught) or 0
-    local estPerHour = avgProfit * (3600 / 10) -- assume ~1 fish every 10s
-
-    local chanceStr = "N/A"
-    if chance > 0 then
-        chanceStr = "1 in " .. formatNumber(math.floor(1 / chance))
-    end
-
-    -- Mutation detection
-    local mutationParts = {}
-
-    -- Check for variant mutation
-    if variantId and AllVariants[variantId] then
-        table.insert(mutationParts, AllVariants[variantId].Name)
-    end
-
-    -- Check for Big mutation (weight range)
-    local isBig = false
-    if fishData.Weight and weight then
-        if fishData.Weight.Big and #fishData.Weight.Big == 2 then
-            local min, max = fishData.Weight.Big[1], fishData.Weight.Big[2]
-            if weight >= min and weight <= max then
-                isBig = true
-                table.insert(mutationParts, "Big")
-            end
-        end
-    end
-
-    -- Check for shiny
-    if isShiny then
-        table.insert(mutationParts, "✨ Shiny ✨")
-    end
-
-    -- Final status
-    local mutationText = "Normal"
-    if #mutationParts > 0 then
-        mutationText = "⚠️ MUTATION → " .. table.concat(mutationParts, " + ")
-    end
-
-    local embed = {
-        ["title"] = playerName .. " caught a " .. fishData.Name .. variantText .. shinyText .. "!",
-        ["color"] = (mutationText ~= "Normal" and 0xFF0000) or (isShiny and 0x00FFEA or 0xFFAA00),
-        ["fields"] = {
-            { ["name"] = "🎣 Fish",              ["value"] = fishData.Name .. variantText .. shinyText, ["inline"] = true },
-            { ["name"] = "⚖️ Weight",           ["value"] = string.format("%.2f kg", weight), ["inline"] = true },
-            { ["name"] = "🧬 Status",           ["value"] = mutationText, ["inline"] = true },
-            { ["name"] = "✨ Rarity",            ["value"] = chanceStr, ["inline"] = true },
-            { ["name"] = "🏆 Tier",              ["value"] = (fishData.Tier == 7 and "SECRET") or tostring(fishData.Tier), ["inline"] = true },
-            { ["name"] = "💰 Sell Price",        ["value"] = formatNumber(sellPrice), ["inline"] = true },
-            { ["name"] = "📊 Total Fish Caught", ["value"] = tostring(fishCaught), ["inline"] = true },
-            { ["name"] = "📈 Est Profit/hr",     ["value"] = formatNumber(math.floor(estPerHour)), ["inline"] = true },
-            { ["name"] = "📊 Total Profit",      ["value"] = formatNumber(totalProfit), ["inline"] = true },
-        },
-        ["footer"] = { ["text"] = "Anggazyy Hub - " .. os.date("%I:%M %p") },
-        ["timestamp"] = os.date("!%Y-%m-%dT%H:%M:%SZ")
-    }
-
-    if SEND_BIG_IMAGE and fishData.Icon and fishData.Icon ~= "rbxassetid://0" then
-        embed["image"] = { ["url"] = fishData.Icon }
-    end
-
-    local content = ""
-    if DISCORD_USER_ID and DISCORD_USER_ID ~= "" then
-        content = "<@" .. DISCORD_USER_ID .. ">"
-    end
-
-    local payload = {
-        ["username"] = "Anggazyy Hub",
-        ["avatar_url"] = "https://files.catbox.moe/of2fla.jpg",
-        ["content"] = content,
-        ["embeds"] = { embed }
-    }
-
-    local success, err = pcall(function()
-        requestFunc({
-            Url = WEBHOOK_URL,
-            Method = "POST",
-            Headers = { ["Content-Type"] = "application/json" },
-            Body = HttpService:JSONEncode(payload)
-        })
-    end)
-
-    if not success then
-        warn("[Webhook] Failed to send webhook:", err)
-    end
-end
-
--- Mobile Autofarm Functions
-local function toggleMobileAutoFishing(value)
-    mobileAutoFishingEnabled = value
-    local success, result = pcall(function()
-        local Event = game:GetService("ReplicatedStorage").Packages._Index["sleitnick_net@0.2.0"].net["RF/UpdateAutoFishingState"]
-        return Event:InvokeServer(value)
-    end)
-    if success then
-        Notify({Title = "Mobile Auto Fishing", Content = "Mobile Auto Fishing " .. (value and "enabled!" or "disabled!"), Duration = 3})
-        if value then
-            pcall(function()
-                local EquipEvent = game:GetService("ReplicatedStorage").Packages._Index["sleitnick_net@0.2.0"].net["RE/EquipToolFromHotbar"]
-                EquipEvent:FireServer(1)
-                Notify({Title = "Mobile Auto Fishing", Content = "Equipped fishing tool from hotbar.", Duration = 3})
-            end)
-        else
-            if mobileMonitorThread then
-                task.cancel(mobileMonitorThread)
-                mobileMonitorThread = nil
-            end
-            local hrp = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
-            if hrp then hrp.Anchored = false end
-            if platform then platform:Destroy() platform = nil end
-            currentEvent = "None"
-        end
-    else
-        warn("Failed to toggle mobile auto fishing: " .. tostring(result))
-        Notify({Title = "Mobile Auto Fishing Error", Content = "Failed to toggle mobile auto fishing: " .. tostring(result), Duration = 5})
-    end
-end
-
--- Dynamic Auto Farm Functions
-local function teleportToEventLocation(eventLocation, eventName)
-    local char = LocalPlayer.Character
-    local hrp = char and char:FindFirstChild("HumanoidRootPart")
-    if eventLocation and hrp then
-        createPlatform(eventLocation.Position, 0)
-
-        hrp.Anchored = false
-        hrp.CFrame = platform.CFrame + Vector3.new(0, 6, 0)
-        task.wait(1)
-        hrp.Anchored = true
-
-        currentEvent = eventName
-        Notify({Title = "Auto Farm", Content = "Teleported to " .. eventName .. " (platform 10 studs lower, player frozen).", Duration = 3})
-    else
-        Notify({Title = "Auto Farm", Content = "No " .. eventName .. " event found!", Duration = 3})
-    end
-end
-
-local function teleportToVolcano()
-    local rotatedCFrame = volcanoCFrame * CFrame.Angles(0, math.rad(45), 0)
-    createPlatform(rotatedCFrame.Position, 23.3, rotatedCFrame)
-
-    local char = LocalPlayer.Character
-    local hrp = char and char:FindFirstChild("HumanoidRootPart")
-    if hrp then
-        hrp.Anchored = false
-        hrp.CFrame = platform.CFrame + Vector3.new(0, 6, 0)
-        task.wait(1)
-        hrp.Anchored = true
-    end
-
-    currentEvent = "Volcano"
-    Notify({Title = "Auto Farm", Content = "At Volcano.", Duration = 3})
-end
-
--- Event monitoring
-local function monitorEvent()
-    local wasEvent = "None"
-    while autoFarmEnabled do
-        local eventLocation, eventName = getEventLocation()
-        if eventName ~= "None" and wasEvent == "None" then
-            teleportToEventLocation(eventLocation, eventName)
-        elseif eventName == "None" and wasEvent ~= "None" then
-            teleportToVolcano()
-        end
-        wasEvent = eventName
-        task.wait(5)
-    end
-end
-
--- Auto Farm toggle
-local function toggleAutoFarm(value)
-    autoFarmEnabled, fishingEnabled = value, value
-    if value then
-        equipFishingRod()
-        teleportToVolcano()
-        startAutoFishingSecond()
-        monitorThread = task.spawn(monitorEvent)
-        Notify({Title = "Auto Farm", Content = "Auto Farm enabled.", Duration = 5})
-    else
-        if fishingThread then task.cancel(fishingThread) fishingThread = nil end
-        if monitorThread then task.cancel(monitorThread) monitorThread = nil end
-        unequipFishingRod()
-        local hrp = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
-        if hrp then hrp.Anchored = false end
-        if platform then platform:Destroy() platform = nil end
-        currentEvent = "None"
-        Notify({Title = "Auto Farm", Content = "Auto Farm disabled.", Duration = 3})
-    end
-end
-
--- =============================================================================
--- EXTERNAL SCRIPTS LOADING
--- =============================================================================
-
--- Step 2: Define external script URLs
-local luckFishScript = "https://raw.githubusercontent.com/fpszrxy/sigma/refs/heads/main/luck%20server%20fish%20it"
-local eventWebhookScript = "https://raw.githubusercontent.com/fpszrxy/sigma/refs/heads/main/event%20webhook"
-
--- Step 3: Example fetch & execution (if using game platforms like Roblox)
-local function loadScriptFromUrl(url)
-    local success, response = pcall(function()
-        return game:HttpGet(url)
-    end)
-
-    if success then
-        local func = loadstring(response)
-        if func then
-            return func()
-        end
-    end
-end
-
--- Step 4: Execute scripts (optional)
+-- Auto-clean money icons
 task.spawn(function()
-    -- Uncomment jika ingin load external scripts
-    -- loadScriptFromUrl(luckFishScript)
-    -- loadScriptFromUrl(eventWebhookScript)
+    while task.wait(1) do
+        for _, obj in ipairs(CoreGui:GetDescendants()) do
+            if obj and (obj:IsA("ImageLabel") or obj:IsA("ImageButton") or obj:IsA("TextLabel")) then
+                local nameLower = (obj.Name or ""):lower()
+                local textLower = (obj.Text or ""):lower()
+                if string.find(nameLower, "money") or string.find(textLower, "money") or string.find(nameLower, "100") then
+                    pcall(function()
+                        obj.Visible = false
+                        if obj:IsA("GuiObject") then
+                            obj.Active = false
+                            obj.ZIndex = 0
+                        end
+                    end)
+                end
+            end
+        end
+    end
 end)
 
+-- Notification System
+local function Notify(opts)
+    pcall(function()
+        WindUI:Notify({
+            Title = opts.Title or "Notification",
+            Content = opts.Content or "",
+            Duration = opts.Duration or 3,
+            Icon = opts.Icon or "info"
+        })
+    end)
+end
+
 -- =============================================================================
--- BLATANT FISHING SYSTEM - UPDATED WORKING VERSION
+-- BLATANT FISHING SYSTEM - USING UPDATED MODULE
 -- =============================================================================
 
 local function InitializeBlatantFishing()
-    local success, result = pcall(function()
-        -- Load required modules for Blatant Fishing
-        Net_upvr = require(ReplicatedStorage.Packages.Net)
-        Trove_upvr = require(ReplicatedStorage.Packages.Trove)
-        Constants_upvr = require(ReplicatedStorage.Shared.Constants)
-        
-        -- Get fishing module
-        for _, module in pairs(ReplicatedStorage:GetDescendants()) do
-            if module:IsA("ModuleScript") and (string.find(module.Name:lower(), "fishing") or string.find(module.Name:lower(), "controller")) then
-                local modSuccess, modResult = pcall(function()
-                    return require(module)
-                end)
-                if modSuccess and type(modResult) == "table" then
-                    if modResult.RequestChargeFishingRod and modResult.FishingRodStarted then
-                        module_upvr = modResult
-                        break
-                    end
-                end
-            end
-        end
-        
-        if not module_upvr then
-            local FishingController = ReplicatedStorage.Controllers:FindFirstChild("FishingController")
-            if FishingController then
-                module_upvr = require(FishingController)
-            end
-        end
-        
-        -- Get remote events/functions
-        FISHING_COMPLETED_REMOTE = Net_upvr:RemoteEvent("FishingCompleted")
-        RequestFishingMinigameStarted_Net = Net_upvr:RemoteFunction("RequestFishingMinigameStarted")
-        
-        -- Save original functions
-        if module_upvr then
-            originalFishingRodStarted = module_upvr.FishingRodStarted
-            originalSendFishingRequestToServer = module_upvr.SendFishingRequestToServer
-            originalRequestChargeFishingRod = module_upvr.RequestChargeFishingRod
-        end
-        
-        -- Initialize trove
-        BLATANT_MODE_TROVE = Trove_upvr.new()
-        
-        return true
-    end)
-    
+    local success = Network.initialize()
     if success then
         Notify({Title = "Blatant Fishing", Content = "System initialized successfully", Duration = 3})
         return true
     else
-        Notify({Title = "Blatant Fishing Error", Content = "Failed to initialize: " .. tostring(result), Duration = 4})
+        Notify({Title = "Blatant Fishing Error", Content = "Failed to initialize network", Duration = 4})
         return false
-    end
-end
-
--- Fungsi yang menjalankan logika penyelesaian minigame secara instan (Blatant)
-local function AutoFishComplete(rodData, minigameData)
-    -- Blantant Mode: Delay reel (0 - 1.87)
-    local reelDelay = blatantReelDelay
-    if reelDelay > 0 then
-        task.wait(reelDelay)
-    end
-    
-    -- Fishing Complete: Langsung tembak RemoteEvent "FishingCompleted" ke server.
-    pcall(function()
-        FISHING_COMPLETED_REMOTE:FireServer() 
-    end)
-    
-    print("⚡ Blatant Mode: Minigame Bypassed. Fish Retrieved.")
-end
-
--- Fungsi HOOK untuk menimpa 'FishingRodStarted'
-local function HookFishingRodStarted(rodData, minigameData)
-    if isBlatantActive then
-        -- Jika mode Blatant aktif, langsung selesaikan di thread terpisah (Non-Blocking)
-        task.spawn(function()
-            AutoFishComplete(rodData, minigameData)
-        end)
-    else
-        -- Jika tidak aktif, jalankan fungsi asli
-        if originalFishingRodStarted then
-            originalFishingRodStarted(rodData, minigameData)
-        end
-    end
-end
-
--- Fungsi untuk mendapatkan mouse position yang aman
-local function GetSafeMousePosition()
-    local UserInputService = game:GetService("UserInputService")
-    local CurrentCamera = workspace.CurrentCamera
-    
-    if UserInputService.MouseEnabled then
-        return UserInputService:GetMouseLocation()
-    else
-        local viewportSize = CurrentCamera.ViewportSize
-        return Vector2.new(viewportSize.X / 2, viewportSize.Y / 2)
-    end
-end
-
--- Approach 1: Menggunakan RequestChargeFishingRod dengan bypass
-local function BlatantCastMethod1()
-    local success, result = pcall(function()
-        -- Set konfirmasi untuk bypass user input
-        _G.confirmFishingInput = function() return true end
-        
-        local mousePos = GetSafeMousePosition()
-        local skipCharge = true
-        
-        -- Panggil RequestChargeFishingRod dengan parameter skip charge yang disuntikkan
-        local castResult = module_upvr:RequestChargeFishingRod(mousePos, nil, skipCharge) -- Tambahkan skipCharge
-        
-        _G.confirmFishingInput = nil
-        return castResult
-    end)
-    
-    return success and result -- return success DAN result
-end
-
--- Main blatant casting function (Menggunakan Method 1 untuk spam)
-local function BlatantCastFishingRod()
-    local success = BlatantCastMethod1()
-    if success then
-        -- Casting berhasil, segera kembalikan 'true' agar loop bisa lempar lagi
-        print("✅ Blatant Cast: Method 1 (Spam Cast) successful")
-        return true
-    end
-    
-    print("❌ Blatant Cast: Method 1 failed")
-    return false
-end
-
--- =============================================================================
--- BLATANT FISHING LOOP (Pengontrol Kecepatan Spam)
--- =============================================================================
-
-local function BlatantFishingLoop()
-    while isBlatantActive do
-        local castSuccess = BlatantCastFishingRod()
-        
-        if not castSuccess then
-            print("🔄 Retrying cast...")
-        end
-
-        -- Delay murni untuk mengontrol kecepatan spam cast (cooldown antar lemparan)
-        task.wait(blatantFishingDelay)
-    end
-end
-
--- Hook untuk RequestChargeFishingRod
-local function HookRequestChargeFishingRod(arg1, arg2, arg3)
-    if isBlatantActive then
-        print("⚡ Blatant Mode: Fast casting via RequestChargeFishingRod")
-        
-        -- Di Blatant Mode, gunakan parameter untuk skip charging
-        local mousePos = arg1 or GetSafeMousePosition()
-        local skipCharge = true
-        
-        return originalRequestChargeFishingRod(mousePos, arg2, skipCharge)
-    else
-        return originalRequestChargeFishingRod(arg1, arg2, arg3)
-    end
-end
-
--- Hook untuk SendFishingRequestToServer
-local function HookSendFishingRequestToServer(mousePosition, power, skipCharge)
-    if isBlatantActive then
-        print("⚡ Blatant Mode: SendFishingRequestToServer with forced parameters")
-        return originalSendFishingRequestToServer(mousePosition, 0.5, true)
-    else
-        return originalSendFishingRequestToServer(mousePosition, power, skipCharge)
     end
 end
 
@@ -1182,80 +425,29 @@ end
 
 -- Fungsi publik untuk mengaktifkan/menonaktifkan Blatant Mode
 local function ToggleBlatantMode(enable)
-    if enable == isBlatantActive then return end
+    if enable == Fishing.useBlatantMode then return end
     
     if enable then
         -- Initialize system if not already initialized
-        if not module_upvr or not FISHING_COMPLETED_REMOTE then
+        if not Network.Events.fishing then
             if not InitializeBlatantFishing() then
                 return false
             end
         end
         
-        isBlatantActive = true
-        print("✅ Blantant Mode (Fast Fishing): ENABLED.")
+        -- Start fishing dengan mode blatant
+        local config = {
+            FishDelay = blatantFishingDelay,
+            CatchDelay = blatantReelDelay
+        }
         
-        -- Terapkan Hook pada fungsi-fungsi fishing
-        if module_upvr then
-            if module_upvr.FishingRodStarted ~= HookFishingRodStarted then
-                module_upvr.FishingRodStarted = HookFishingRodStarted
-            end
-            
-            if module_upvr.RequestChargeFishingRod and module_upvr.RequestChargeFishingRod ~= HookRequestChargeFishingRod then
-                module_upvr.RequestChargeFishingRod = HookRequestChargeFishingRod
-            end
-            
-            if module_upvr.SendFishingRequestToServer and module_upvr.SendFishingRequestToServer ~= HookSendFishingRequestToServer then
-                module_upvr.SendFishingRequestToServer = HookSendFishingRequestToServer
-            end
-            
-            -- Tambahkan fungsi pembersihan ke Trove
-            if BLATANT_MODE_TROVE then
-                BLATANT_MODE_TROVE:Add(function() 
-                    if module_upvr then
-                        if originalFishingRodStarted then
-                            module_upvr.FishingRodStarted = originalFishingRodStarted 
-                        end
-                        if originalRequestChargeFishingRod then
-                            module_upvr.RequestChargeFishingRod = originalRequestChargeFishingRod
-                        end
-                        if originalSendFishingRequestToServer then
-                            module_upvr.SendFishingRequestToServer = originalSendFishingRequestToServer
-                        end
-                    end
-                end)
-            end
-        end
-        
-        -- Jalankan loop Fast Fishing (Spam)
-        if BLATANT_MODE_TROVE then
-            BLATANT_MODE_TROVE:Add(task.spawn(BlatantFishingLoop))
-        end
-        
+        Fishing.start(config, true)
         Notify({Title = "⚡ Blatant Fishing", Content = "Fast fishing mode activated - Instant spam casting.", Duration = 3})
         
     else
-        isBlatantActive = false
-        print("❌ Blantant Mode (Fast Fishing): DISABLED. Cleaning up...")
-        
-        -- Cleanup
-        if BLATANT_MODE_TROVE then
-            BLATANT_MODE_TROVE:Clean()
-        end
-        
-        -- Restore original functions
-        if module_upvr then
-            if originalFishingRodStarted then
-                module_upvr.FishingRodStarted = originalFishingRodStarted
-            end
-            if originalRequestChargeFishingRod then
-                module_upvr.RequestChargeFishingRod = originalRequestChargeFishingRod
-            end
-            if originalSendFishingRequestToServer then
-                module_upvr.SendFishingRequestToServer = originalSendFishingRequestToServer
-            end
-        end
-        
+        -- Stop fishing
+        Fishing.stop()
+        Fishing.setBlatantMode(false)
         Notify({Title = "Blatant Fishing", Content = "Fast fishing mode deactivated", Duration = 3})
     end
     
@@ -1264,18 +456,14 @@ end
 
 -- Manual fishing function untuk testing
 local function ManualBlatantFish()
-    if not isBlatantActive then
+    if not Fishing.useBlatantMode then
         Notify({Title = "Blatant Fishing", Content = "Please enable Blatant Mode first", Duration = 3})
         return
     end
     
     pcall(function()
-        local success = BlatantCastFishingRod()
-        if success then
-            Notify({Title = "⚡ Manual Cast", Content = "Casting fishing rod instantly...", Duration = 2})
-        else
-            Notify({Title = "❌ Manual Cast Failed", Content = "Failed to cast fishing rod", Duration = 2})
-        end
+        castRod()
+        Notify({Title = "⚡ Manual Cast", Content = "Casting fishing rod instantly...", Duration = 2})
     end)
 end
 
@@ -1617,20 +805,19 @@ local function ManualKnockAllDoors()
     })
 end
 
--- Auto Fishing System
+-- Auto Fishing System menggunakan modul baru
 local function StartAutoFish()
     if autoFishEnabled then return end
     autoFishEnabled = true
     Notify({Title = "Auto Fishing", Content = "System activated successfully", Duration = 2})
 
-    autoFishLoopThread = task.spawn(function()
-        while autoFishEnabled do
-            pcall(function()
-                SafeInvokeAutoFishing(true)
-            end)
-            task.wait(4)
-        end
-    end)
+    -- Start fishing dengan mode normal
+    local config = {
+        FishDelay = 4,
+        CatchDelay = 2
+    }
+    
+    Fishing.start(config, false)
 end
 
 local function StopAutoFish()
@@ -1638,9 +825,7 @@ local function StopAutoFish()
     autoFishEnabled = false
     Notify({Title = "Auto Fishing", Content = "System deactivated", Duration = 2})
     
-    pcall(function()
-        SafeInvokeAutoFishing(false)
-    end)
+    Fishing.stop()
 end
 
 -- =============================================================================
@@ -2153,39 +1338,6 @@ local function DestroyCoordinateDisplay()
     end
 end
 
--- Notification System
-local function Notify(opts)
-    pcall(function()
-        WindUI:Notify({
-            Title = opts.Title or "Notification",
-            Content = opts.Content or "",
-            Duration = opts.Duration or 3,
-            Icon = opts.Icon or "info"
-        })
-    end)
-end
-
--- Auto-clean money icons
-task.spawn(function()
-    while task.wait(1) do
-        for _, obj in ipairs(CoreGui:GetDescendants()) do
-            if obj and (obj:IsA("ImageLabel") or obj:IsA("ImageButton") or obj:IsA("TextLabel")) then
-                local nameLower = (obj.Name or ""):lower()
-                local textLower = (obj.Text or ""):lower()
-                if string.find(nameLower, "money") or string.find(textLower, "money") or string.find(nameLower, "100") then
-                    pcall(function()
-                        obj.Visible = false
-                        if obj:IsA("GuiObject") then
-                            obj.Active = false
-                            obj.ZIndex = 0
-                        end
-                    end)
-                end
-            end
-        end
-    end
-end)
-
 -- =============================================================================
 -- WINDUI MAIN WINDOW CREATION
 -- =============================================================================
@@ -2217,7 +1369,7 @@ local Window = WindUI:CreateWindow({
 
 -- Add version tag
 Window:Tag({
-    Title = "v2.0-full",
+    Title = "v1.0-beta",
     Icon = "github",
     Color = Color3.fromHex("#6b31ff")
 })
@@ -2360,114 +1512,7 @@ AutoTab:Button({
     Callback = ManualBlatantFish
 })
 
--- ========== DYNAMIC AUTO FARM TAB ==========
-local DynamicFarmTab = Window:Tab({
-    Title = "Dynamic Farm",
-    Icon = "zap",
-})
-
-DynamicFarmTab:Section({
-    Title = "Dynamic Auto Farm",
-    Desc = "AFK farm at Volcano, auto TP to events",
-})
-
-DynamicFarmTab:Toggle({
-    Title = "Enable Auto Farm",
-    Flag = "AutoFarmToggle",
-    Default = false,
-    Callback = function(state)
-        toggleAutoFarm(state)
-    end
-})
-
--- Status Label
-local StatusLabel = DynamicFarmTab:Label("Current Event: None")
-task.spawn(function()
-    while task.wait(2) do
-        StatusLabel:SetText("Current Event: " .. currentEvent)
-    end
-end)
-
-DynamicFarmTab:Space()
-
-DynamicFarmTab:Section({
-    Title = "Auto Fishing Controls",
-})
-
-DynamicFarmTab:Toggle({
-    Title = "Enable Auto Fishing",
-    Desc = "Automatically fish with perfect catches",
-    Flag = "AutoFishingSecondToggle",
-    Default = false,
-    Callback = function(Value)
-        fishingEnabled = Value
-        if Value then
-            startAutoFishingSecond()
-            Notify({Title = 'Auto Fishing', Content = 'Auto fishing enabled! Always perfect catches!', Duration = 3})
-        else
-            if fishingThread then
-                task.cancel(fishingThread)
-                fishingThread = nil
-            end
-            unequipFishingRod()
-            Notify({Title = 'Auto Fishing', Content = 'Auto fishing disabled!', Duration = 2})
-        end
-    end
-})
-
-DynamicFarmTab:Toggle({
-    Title = "Auto Sell Items",
-    Desc = "Sells all items every " .. sellDelay .. " seconds",
-    Flag = "AutoSellSecondToggle",
-    Default = false,
-    Callback = function(Value)
-        autoSellEnabled = Value
-        if Value then
-            startAutoSellSecond()
-            Notify({Title = 'Auto Sell', Content = 'Auto sell enabled! Selling every ' .. sellDelay .. ' seconds.', Duration = 3})
-        else
-            if sellThread then
-                task.cancel(sellThread)
-                sellThread = nil
-            end
-            Notify({Title = 'Auto Sell', Content = 'Auto sell disabled!', Duration = 2})
-        end
-    end
-})
-
--- ========== MOBILE AUTOFARM TAB ==========
-local MobileAutofarmTab = Window:Tab({
-    Title = "Mobile Farm",
-    Icon = "smartphone",
-})
-
-MobileAutofarmTab:Section({
-    Title = "Mobile Auto Farm",
-})
-
-MobileAutofarmTab:Toggle({
-    Title = "Enable Mobile Auto Fishing",
-    Desc = "Toggles in-game auto fishing for mobile users",
-    Flag = "MobileAutoFishingToggle",
-    Default = false,
-    Callback = toggleMobileAutoFishing
-})
-
-local MobileStatusLabel = MobileAutofarmTab:Label("Current Event: None")
-task.spawn(function()
-    while task.wait(1) do
-        MobileStatusLabel:SetText("Current Event: " .. currentEvent)
-    end
-end)
-
-MobileAutofarmTab:Space()
-
-MobileAutofarmTab:Section({
-    Title = "Information",
-})
-
-MobileAutofarmTab:Label('How to Use', true)
-MobileAutofarmTab:Label('1. Enable Mobile Auto Fishing to start autofishing\n2. Automatically teleports to Volcano or detected events\n3. Uses the game\'s built-in mobile autofishing system', true)
+AutoTab:Space()
 
 -- ========== WEATHER MACHINE TAB ==========
 local WeatherTab = Window:Tab({
@@ -2726,7 +1771,7 @@ PlayerConfigTab:Toggle({
 
 PlayerConfigTab:Space()
 
--- Anti AFK Section
+-- Anti AFK Section - DITAMBAHKAN DI PLAYER CONFIG
 PlayerConfigTab:Section({
     Title = "Anti AFK System",
     TextSize = 20,
@@ -2780,7 +1825,7 @@ PlayerConfigTab:Toggle({
 
 PlayerConfigTab:Space()
 
--- Movement Configuration
+-- Movement Configuration - DIPINDAHKAN DARI PLAYER STATS
 PlayerConfigTab:Section({
     Title = "Movement Configuration",
     TextSize = 20,
@@ -2835,46 +1880,6 @@ PlayerConfigTab:Button({
 
 PlayerConfigTab:Space()
 
--- Player Controls Section
-PlayerConfigTab:Section({
-    Title = "Player Controls",
-    TextSize = 20,
-    FontWeight = Enum.FontWeight.SemiBold,
-})
-
-PlayerConfigTab:Toggle({
-    Title = "Freeze Player",
-    Desc = "Freezes your character in place",
-    Flag = "FreezePlayerToggle",
-    Default = false,
-    Callback = function(Value)
-        freezePlayer(Value)
-        Notify({Title = 'Player Control', Content = 'Player ' .. (Value and 'frozen!' or 'unfrozen!'), Duration = 2})
-    end
-})
-
-PlayerConfigTab:Toggle({
-    Title = "Remove Oxy",
-    Desc = "Toggles oxygen removal on or off",
-    Flag = "RemoveOxyToggle",
-    Default = false,
-    Callback = function(Value)
-        removeOxygen(Value)
-    end
-})
-
-PlayerConfigTab:Toggle({
-    Title = "Fish Radar",
-    Desc = "Toggles fish radar on or off",
-    Flag = "FishRadarToggle",
-    Default = false,
-    Callback = function(Value)
-        toggleFishRadar(Value)
-    end
-})
-
-PlayerConfigTab:Space()
-
 -- Quick Actions
 PlayerConfigTab:Section({
     Title = "Quick Actions",
@@ -2905,7 +1910,7 @@ TeleportTab:Section({
     Desc = "Quick teleport to fishing spots",
 })
 
--- DROPDOWN UNTUK MAP TELEPORT
+-- DROPDOWN UNTUK MAP TELEPORT - DITAMBAHKAN LOKASI BARU
 TeleportTab:Dropdown({
     Title = "Select Destination",
     Flag = "MapSelect",
@@ -2920,11 +1925,7 @@ TeleportTab:Dropdown({
         "Ancient Jungle",
         "Sacred Temple",
         "Undground Cellar",
-        "Fishermand Iland",
-        "Coral Reefs",
-        "Fisherman Island",
-        "Weather Machine",
-        "Treasure Room"
+        "Fishermand Iland"
     },
     Value = "Kohana",
     Callback = function(selected)
@@ -2932,7 +1933,7 @@ TeleportTab:Dropdown({
     end
 })
 
--- BUTTON TELEPORT
+-- BUTTON TELEPORT - DITAMBAHKAN FUNGSI TELEPORT KE LOKASI BARU
 TeleportTab:Button({
     Title = "Teleport Now",
     Icon = "navigation",
@@ -2963,14 +1964,8 @@ TeleportTab:Button({
         elseif currentSelectedMap == "Fishermand Iland" then
             targetPosition = Vector3.new(-26, 9, 2688)
         else
-            -- Use island CFrame positions for new locations
-            local islandCFrame = islands[currentSelectedMap]
-            if islandCFrame then
-                targetPosition = islandCFrame.Position
-            else
-                -- Default position jika tidak ada yang cocok
-                targetPosition = Vector3.new(-637, 16, 626)
-            end
+            -- Default position jika tidak ada yang cocok
+            targetPosition = Vector3.new(-637, 16, 626)
         end
         
         -- Eksekusi teleport
@@ -3005,224 +2000,6 @@ TeleportTab:Toggle({
     end
 })
 
-TeleportTab:Space()
-
-TeleportTab:Section({
-    Title = "Special Locations",
-})
-
-TeleportTab:Button({
-    Title = "Enchanting Altar TP",
-    Icon = "sparkles",
-    Callback = function()
-        teleportToEnchantingAltar()
-    end
-})
-
--- ========== ESP TAB ==========
-local ESPTab = Window:Tab({
-    Title = "ESP",
-    Icon = "eye",
-})
-
-ESPTab:Section({
-    Title = "Island ESP",
-    Desc = "Visual indicators for all islands",
-})
-
-ESPTab:Toggle({
-    Title = "Islands ESP",
-    Desc = "Shows highlights, labels and distance for all islands",
-    Flag = "IslandESPToggle",
-    Default = false,
-    Callback = function(Value)
-        toggleIslandESP(Value)
-    end
-})
-
--- ========== SHOP TAB ==========
-local ShopTab = Window:Tab({
-    Title = "Shop",
-    Icon = "shopping-cart",
-})
-
-ShopTab:Section({
-    Title = "Fishing Rods Shop",
-})
-
-ShopTab:Dropdown({
-    Title = "Buy Fishing Rod",
-    Flag = "FishingRodDropdown",
-    Values = {
-        "Lucky Rod - 350",
-        "Carbon Rod - 900",
-        "Grass Rod - 1.5k",
-        "Demascus Rod - 3k",
-        "Ice Rod - 5k",
-        "Luck Rod - 15k",
-        "Midnight Rod - 50k",
-        "Steampunk Rod - 215k",
-        "Astral Rod - 1M"
-    },
-    Default = 1,
-    Multi = false,
-    Callback = function(Value)
-        local idMap = {
-            ["Lucky Rod - 350"] = 4,
-            ["Carbon Rod - 900"] = 76,
-            ["Grass Rod - 1.5k"] = 85,
-            ["Demascus Rod - 3k"] = 77,
-            ["Ice Rod - 5k"] = 78,
-            ["Luck Rod - 15k"] = 79,
-            ["Midnight Rod - 50k"] = 80,
-            ["Steampunk Rod - 215k"] = 6,
-            ["Astral Rod - 1M"] = 5
-        }
-        local id = idMap[Value]
-        purchaseFishingRod(id)
-    end
-})
-
-ShopTab:Space()
-
-ShopTab:Section({
-    Title = "Bobbers Shop",
-})
-
-ShopTab:Dropdown({
-    Title = "Buy Bobber",
-    Flag = "BobberDropdown",
-    Values = {
-        "Topwater Bait - 100",
-        "Luck Bait - 1k",
-        "Midnight Bait - 3k",
-        "Chroma Bait - 290k",
-        "Dark Matter Bait - 630k",
-        "Corrupt Bait - 1.15M",
-        "Aether Bait - 3.70M"
-    },
-    Default = 1,
-    Multi = false,
-    Callback = function(Value)
-        local idMap = {
-            ["Topwater Bait - 100"] = 10,
-            ["Luck Bait - 1k"] = 2,
-            ["Midnight Bait - 3k"] = 3,
-            ["Chroma Bait - 290k"] = 6,
-            ["Dark Matter Bait - 630k"] = 8,
-            ["Corrupt Bait - 1.15M"] = 15,
-            ["Aether Bait - 3.70M"] = 16
-        }
-        local id = idMap[Value]
-        purchaseBobber(id)
-    end
-})
-
-ShopTab:Space()
-
-ShopTab:Section({
-    Title = "Weather Events Shop",
-})
-
-ShopTab:Dropdown({
-    Title = "Buy Weather Event",
-    Flag = "WeatherDropdown",
-    Values = {
-        "Snow - 15k",
-        "Cloudy - 20k",
-        "Storm - 35k",
-        "Radiant - 50k",
-        "Shark Hunt - 300k"
-    },
-    Default = 1,
-    Multi = false,
-    Callback = function(Value)
-        local eventName = Value:match("^[^%-]+"):gsub("^%s*(.-)%s*$", "%1")
-        purchaseWeatherEvent(eventName)
-    end
-})
-
--- ========== WEBHOOK TAB ==========
-local WebhookTab = Window:Tab({
-    Title = "Webhook",
-    Icon = "message-circle",
-})
-
-WebhookTab:Section({
-    Title = "Webhook Configuration",
-    Desc = "Configure Discord webhook notifications",
-})
-
-WebhookTab:Input({
-    Title = "Discord Webhook URL",
-    Default = "",
-    Placeholder = "https://discord.com/api/webhooks/...",
-    Flag = "WebhookURL",
-    Callback = function(Value)
-        WEBHOOK_URL = Value
-        if Value ~= "" then
-            Notify({Title = "Webhook", Content = "✅ Webhook URL saved!", Duration = 3})
-        else
-            Notify({Title = "Webhook", Content = "⚠️ Webhook URL is empty!", Duration = 3})
-        end
-    end
-})
-
-WebhookTab:Input({
-    Title = "Discord User ID (optional)",
-    Default = "",
-    Placeholder = "123456789012345678",
-    Flag = "DiscordUserID",
-    Callback = function(Value)
-        DISCORD_USER_ID = Value
-    end
-})
-
-WebhookTab:Toggle({
-    Title = "Also send big image (embed.image)",
-    Flag = "BigImageToggle",
-    Default = false,
-    Callback = function(Value)
-        SEND_BIG_IMAGE = Value
-    end
-})
-
-WebhookTab:Toggle({
-    Title = "Debug Icon (show URL)",
-    Flag = "DebugIconToggle",
-    Default = false,
-    Callback = function(Value)
-        DEBUG_ICON = Value
-    end
-})
-
-WebhookTab:Space()
-
-WebhookTab:Section({
-    Title = "Status & Test",
-})
-
-WebhookTab:Button({
-    Title = "Test Webhook (Robot Kraken)",
-    Icon = "send",
-    Callback = function()
-        if not WEBHOOK_URL or WEBHOOK_URL == "" then
-            Notify({Title = "Webhook", Content = "⚠️ No webhook URL set!", Duration = 3})
-            return
-        end
-        sendWebhook(159, 420.5, LocalPlayer.Name, nil, false, false) -- Robot Kraken test
-        Notify({Title = "Webhook", Content = "📨 Test webhook sent!", Duration = 3})
-    end
-})
-
-WebhookTab:Button({
-    Title = "Reload Fish Data",
-    Icon = "refresh-cw",
-    Callback = function()
-        Notify({Title = "Webhook", Content = "Fish data reloaded (manual refresh)", Duration = 3})
-    end
-})
-
 -- ========== SETTINGS TAB ==========
 local SettingsTab = Window:Tab({
     Title = "Settings",
@@ -3244,21 +2021,6 @@ SettingsTab:Button({
         StopAutoTrickTreat()
         ToggleBlatantMode(false)
         DestroyCoordinateDisplay()
-        
-        -- Cleanup from new features
-        if fishingThread then task.cancel(fishingThread) fishingThread = nil end
-        if monitorThread then task.cancel(monitorThread) monitorThread = nil end
-        if mobileMonitorThread then task.cancel(mobileMonitorThread) mobileMonitorThread = nil end
-        if sellThread then task.cancel(sellThread) sellThread = nil end
-        if platform then platform:Destroy() platform = nil end
-        local hrp = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
-        if hrp then hrp.Anchored = false end
-        toggleIslandESP(false)
-        freezePlayer(false)
-        if removeOxyEnabled then
-            removeOxygen(false)
-        end
-        
         Window:Destroy()
         Notify({Title = "Unload", Content = "Hub unloaded successfully", Duration = 2})
     end
@@ -3284,80 +2046,13 @@ SettingsTab:Button({
     end
 })
 
--- =============================================================================
--- INITIALIZATION AND EVENT LISTENERS
--- =============================================================================
-
--- Listen for fish being caught
-local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local netFolder = ReplicatedStorage.Packages._Index["sleitnick_net@0.2.0"] 
-    and ReplicatedStorage.Packages._Index["sleitnick_net@0.2.0"].net
-
-local Event = netFolder and (netFolder["RE/FishCaught"] or netFolder["FishCaught"])
-if Event then
-    Event.OnClientEvent:Connect(function(fishId, data)
-        local playerName = game.Players.LocalPlayer and game.Players.LocalPlayer.Name or "Unknown"
-        local weight     = data.Weight or 0
-        local variantId = data and data.VariantId
-
-        local fish = AllFishes[fishId]
-
-        -- detect mutations (weight outside dataset)
-        local isMutation = false
-        if fish and fish.Weight then
-            if fish.Weight.Default and type(fish.Weight.Default) == "table" and #fish.Weight.Default >= 2 then
-                local min, max = fish.Weight.Default[1], fish.Weight.Default[2]
-                if weight < min or weight > max then
-                    isMutation = true
-                end
-            elseif fish.Weight.Big and type(fish.Weight.Big) == "table" and #fish.Weight.Big >= 2 then
-                local min, max = fish.Weight.Big[1], fish.Weight.Big[2]
-                if weight < min or weight > max then
-                    isMutation = true
-                end
-            end
-        end
-
-        -- send webhook
-        sendWebhook(fishId, weight, playerName, variantId, isMutation)
-    end)
-else
-    warn("[Fishing Bot] Could not find FishCaught remote.")
-end
-
--- Cleanup
-LocalPlayer.CharacterRemoving:Connect(function()
-    if fishingThread then task.cancel(fishingThread) fishingThread = nil end
-    if monitorThread then task.cancel(monitorThread) monitorThread = nil end
-    if mobileMonitorThread then task.cancel(mobileMonitorThread) mobileMonitorThread = nil end
-    if sellThread then task.cancel(sellThread) sellThread = nil end
-    if platform then platform:Destroy() platform = nil end
-    local hrp = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
-    if hrp then hrp.Anchored = false end
-    toggleIslandESP(false)
-    freezePlayer(false)
-    if removeOxyEnabled then
-        removeOxygen(false)
-    end
-end)
-
-game:GetService("Players").LocalPlayer.CharacterAdded:Connect(function(character)
-    character:WaitForChild("Humanoid")
-    updatePlayerSpeed(playerFrozen and 0 or originalWalkSpeed)
-    updatePlayerJump(originalJumpPower)
-    if playerFrozen and character:FindFirstChild("HumanoidRootPart") then
-        character.HumanoidRootPart.Anchored = true
-    end
-    if removeOxyEnabled then
-        removeOxygen(true)
-    end
-end)
-
 -- Initial Notification
 Notify({
     Title = "Anggazyy Hub Ready", 
-    Content = "WindUI System initialized successfully with ALL NEW FEATURES",
+    Content = "WindUI System initialized successfully with UPDATED Fishing Module",
     Duration = 4
 })
 
-print("🎣 Anggazyy Hub v2.0 FULL - All features loaded successfully!")
+--//////////////////////////////////////////////////////////////////////////////////
+-- WindUI System Initialization Complete
+--//////////////////////////////////////////////////////////////////////////////////
