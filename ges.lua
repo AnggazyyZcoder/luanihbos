@@ -1,3 +1,7 @@
+-- ANGGAZYY HUB - FISH IT AUTOMATION
+-- Advanced Minigame Bypass System
+-- Created by Anggazyy
+
 -- CONFIG: ubah sesuai kebutuhan
 local AUTO_FISH_REMOTE_NAME = "UpdateAutoFishingState"
 local NET_PACKAGES_FOLDER = "Packages"
@@ -73,24 +77,36 @@ local autoTrickTreatEnabled = false
 local trickTreatLoop = nil
 
 -- ====================================================================
---                 FISHING MODULE - UPDATED
+--                 ADVANCED FISHING MODULE WITH MINIGAME BYPASS
 -- ====================================================================
 
-local Fishing = {}
-Fishing.isActive = false
-Fishing.isFishing = false
-Fishing.useBlatantMode = false
+local AdvancedFishing = {}
+AdvancedFishing.isActive = false
+AdvancedFishing.isFishing = false
+AdvancedFishing.useBlatantMode = false
+AdvancedFishing.networkInitialized = false
 
-local Network = {
-    Events = {}
+-- Network Events
+local NetworkEvents = {
+    fishing = nil,
+    sell = nil,
+    charge = nil,
+    minigame = nil,
+    cancel = nil,
+    equip = nil,
+    unequip = nil,
+    favorite = nil
 }
 
--- Initialize network events
-function Network.initialize()
-    local success, events = pcall(function()
-        local net = ReplicatedStorage.Packages._Index["sleitnick_net@0.2.0"].net
+-- Initialize network dengan bypass yang lebih agresif
+function AdvancedFishing.initializeNetwork()
+    if AdvancedFishing.networkInitialized then return true end
+    
+    local success, result = pcall(function()
+        -- Method 1: Coba via Net package
+        local net = require(ReplicatedStorage.Packages._Index["sleitnick_net@0.2.0"].net)
         
-        return {
+        NetworkEvents = {
             fishing = net:WaitForChild("RE/FishingCompleted"),
             sell = net:WaitForChild("RF/SellAllItems"),
             charge = net:WaitForChild("RF/ChargeFishingRod"),
@@ -100,82 +116,208 @@ function Network.initialize()
             unequip = net:WaitForChild("RE/UnequipToolFromHotbar"),
             favorite = net:WaitForChild("RE/FavoriteItem")
         }
+        
+        return true
     end)
     
+    if not success then
+        -- Method 2: Cari manual di ReplicatedStorage
+        success = pcall(function()
+            local remotes = {
+                fishing = ReplicatedStorage:FindFirstChild("FishingCompleted") or ReplicatedStorage:FindFirstChild("RE") and ReplicatedStorage.RE:FindFirstChild("FishingCompleted"),
+                charge = ReplicatedStorage:FindFirstChild("ChargeFishingRod") or ReplicatedStorage:FindFirstChild("RF") and ReplicatedStorage.RF:FindFirstChild("ChargeFishingRod"),
+                minigame = ReplicatedStorage:FindFirstChild("RequestFishingMinigameStarted") or ReplicatedStorage:FindFirstChild("RF") and ReplicatedStorage.RF:FindFirstChild("RequestFishingMinigameStarted"),
+                equip = ReplicatedStorage:FindFirstChild("EquipToolFromHotbar") or ReplicatedStorage:FindFirstChild("RE") and ReplicatedStorage.RE:FindFirstChild("EquipToolFromHotbar"),
+                unequip = ReplicatedStorage:FindFirstChild("UnequipToolFromHotbar") or ReplicatedStorage:FindFirstChild("RE") and ReplicatedStorage.RE:FindFirstChild("UnequipToolFromHotbar")
+            }
+            
+            for name, remote in pairs(remotes) do
+                if remote then
+                    NetworkEvents[name] = remote
+                end
+            end
+        end)
+    end
+    
     if success then
-        Network.Events = events
-        print("[Network] Events initialized")
+        AdvancedFishing.networkInitialized = true
+        print("[AdvancedFishing] Network initialized with bypass")
         return true
     else
-        warn("[Network] Failed to initialize:", events)
+        warn("[AdvancedFishing] Failed to initialize network:", result)
         return false
     end
 end
 
--- Get event by name
-function Network.getEvent(name)
-    return Network.Events[name]
+-- Bypass Minigame System
+local MinigameBypass = {
+    hooked = false,
+    originalFunctions = {}
+}
+
+-- Hook ke fungsi fishing controller untuk bypass minigame
+function MinigameBypass.hookFishingFunctions()
+    if MinigameBypass.hooked then return end
+    
+    pcall(function()
+        -- Cari fishing controller
+        local fishingController
+        for _, module in pairs(ReplicatedStorage:GetDescendants()) do
+            if module:IsA("ModuleScript") and (string.find(module.Name:lower(), "fishing") or string.find(module.Name:lower(), "controller")) then
+                local modSuccess, modResult = pcall(require, module)
+                if modSuccess and type(modResult) == "table" then
+                    if modResult.FishingRodStarted or modResult.StartFishing then
+                        fishingController = modResult
+                        break
+                    end
+                end
+            end
+        end
+        
+        if fishingController then
+            -- Hook FishingRodStarted untuk bypass minigame
+            if fishingController.FishingRodStarted then
+                MinigameBypass.originalFunctions.FishingRodStarted = fishingController.FishingRodStarted
+                fishingController.FishingRodStarted = function(rodData, minigameData)
+                    if AdvancedFishing.useBlatantMode then
+                        print("⚡ [BYPASS] Minigame skipped - Auto completing fishing")
+                        
+                        -- Langsung complete fishing tanpa minigame
+                        task.spawn(function()
+                            task.wait(blatantReelDelay) -- Tunggu delay reel
+                            pcall(function()
+                                if NetworkEvents.fishing then
+                                    NetworkEvents.fishing:FireServer()
+                                    print("✅ [BYPASS] Fishing completed automatically")
+                                end
+                            end)
+                        end)
+                        
+                        return -- Skip original function
+                    else
+                        -- Jalankan fungsi original jika bukan blatant mode
+                        return MinigameBypass.originalFunctions.FishingRodStarted(rodData, minigameData)
+                    end
+                end
+            end
+            
+            -- Hook StartFishing jika ada
+            if fishingController.StartFishing then
+                MinigameBypass.originalFunctions.StartFishing = fishingController.StartFishing
+                fishingController.StartFishing = function(...)
+                    if AdvancedFishing.useBlatantMode then
+                        print("⚡ [BYPASS] StartFishing intercepted")
+                        return true -- Return true untuk bypass
+                    else
+                        return MinigameBypass.originalFunctions.StartFishing(...)
+                    end
+                end
+            end
+            
+            MinigameBypass.hooked = true
+            print("✅ [BYPASS] Fishing functions hooked successfully")
+        end
+    end)
 end
 
--- Cast rod
-local function castRod()
+function MinigameBypass.unhookFishingFunctions()
+    if not MinigameBypass.hooked then return end
+    
     pcall(function()
-        local Events = Network.Events
-        Events.equip:FireServer(1)
+        -- Cari fishing controller lagi untuk restore
+        local fishingController
+        for _, module in pairs(ReplicatedStorage:GetDescendants()) do
+            if module:IsA("ModuleScript") and (string.find(module.Name:lower(), "fishing") or string.find(module.Name:lower(), "controller")) then
+                local modSuccess, modResult = pcall(require, module)
+                if modSuccess and type(modResult) == "table" then
+                    fishingController = modResult
+                    break
+                end
+            end
+        end
+        
+        if fishingController then
+            -- Restore original functions
+            for funcName, originalFunc in pairs(MinigameBypass.originalFunctions) do
+                if fishingController[funcName] then
+                    fishingController[funcName] = originalFunc
+                end
+            end
+            
+            MinigameBypass.hooked = false
+            MinigameBypass.originalFunctions = {}
+            print("✅ [BYPASS] Fishing functions restored")
+        end
+    end)
+end
+
+-- Cast rod dengan bypass
+local function advancedCastRod()
+    pcall(function()
+        if not NetworkEvents.equip then
+            AdvancedFishing.initializeNetwork()
+        end
+        
+        -- Equip fishing rod
+        NetworkEvents.equip:FireServer(1)
         task.wait(0.05)
-        Events.charge:InvokeServer(1755848498.4834)
+        
+        -- Charge fishing rod dengan parameter khusus untuk bypass
+        NetworkEvents.charge:InvokeServer(1755848498.4834)
         task.wait(0.02)
-        Events.minigame:InvokeServer(1.2854545116425, 1)
-        print("[Fishing] Cast")
+        
+        -- Start minigame (akan di-bypass oleh hook)
+        NetworkEvents.minigame:InvokeServer(1.2854545116425, 1)
+        print("🎣 [AdvancedFishing] Cast with bypass")
     end)
 end
 
--- Reel in
-local function reelIn()
+-- Reel in dengan bypass
+local function advancedReelIn()
     pcall(function()
-        Network.Events.fishing:FireServer()
-        print("[Fishing] Reel")
+        if NetworkEvents.fishing then
+            NetworkEvents.fishing:FireServer()
+            print("🎣 [AdvancedFishing] Reel with bypass")
+        end
     end)
 end
 
--- Blatant fishing loop
-local function blatantLoop(config)
-    while Fishing.isActive and Fishing.useBlatantMode do
-        if not Fishing.isFishing then
-            Fishing.isFishing = true
+-- Blatant fishing loop dengan bypass minigame
+local function advancedBlatantLoop(config)
+    while AdvancedFishing.isActive and AdvancedFishing.useBlatantMode do
+        if not AdvancedFishing.isFishing then
+            AdvancedFishing.isFishing = true
             
-            local Events = Network.Events
-            
-            -- Parallel casts
+            -- Fast casting sequence dengan bypass
             pcall(function()
-                Events.equip:FireServer(1)
+                -- Equip rod
+                NetworkEvents.equip:FireServer(1)
                 task.wait(0.01)
                 
-                task.spawn(function()
-                    Events.charge:InvokeServer(1755848498.4834)
-                    task.wait(0.01)
-                    Events.minigame:InvokeServer(1.2854545116425, 1)
-                end)
-                
-                task.wait(0.05)
-                
-                task.spawn(function()
-                    Events.charge:InvokeServer(1755848498.4834)
-                    task.wait(0.01)
-                    Events.minigame:InvokeServer(1.2854545116425, 1)
-                end)
+                -- Multiple casts untuk meningkatkan chance
+                for i = 1, 3 do
+                    task.spawn(function()
+                        NetworkEvents.charge:InvokeServer(1755848498.4834)
+                        task.wait(0.01)
+                        NetworkEvents.minigame:InvokeServer(1.2854545116425, 1)
+                    end)
+                    task.wait(0.05)
+                end
             end)
             
+            -- Tunggu fish delay
             task.wait(config.FishDelay)
             
-            -- Spam reel
-            for i = 1, 5 do
-                pcall(function() Events.fishing:FireServer() end)
+            -- Auto reel multiple times
+            for i = 1, 8 do
+                advancedReelIn()
                 task.wait(0.01)
             end
             
-            task.wait(config.CatchDelay * 0.5)
-            Fishing.isFishing = false
+            -- Cooldown sebelum cast berikutnya
+            task.wait(config.CatchDelay * 0.3)
+            AdvancedFishing.isFishing = false
+            
         else
             task.wait(0.01)
         end
@@ -183,38 +325,50 @@ local function blatantLoop(config)
 end
 
 -- Normal fishing loop
-local function normalLoop(config)
-    while Fishing.isActive and not Fishing.useBlatantMode do
-        if not Fishing.isFishing then
-            Fishing.isFishing = true
+local function advancedNormalLoop(config)
+    while AdvancedFishing.isActive and not AdvancedFishing.useBlatantMode do
+        if not AdvancedFishing.isFishing then
+            AdvancedFishing.isFishing = true
             
-            castRod()
+            advancedCastRod()
             task.wait(config.FishDelay)
-            reelIn()
+            advancedReelIn()
             task.wait(config.CatchDelay)
             
-            Fishing.isFishing = false
+            AdvancedFishing.isFishing = false
         else
             task.wait(0.1)
         end
     end
 end
 
--- Start fishing
-function Fishing.start(config, blatantMode)
-    if Fishing.isActive then return end
+-- Start fishing dengan bypass
+function AdvancedFishing.start(config, blatantMode)
+    if AdvancedFishing.isActive then return end
     
-    Fishing.isActive = true
-    Fishing.useBlatantMode = blatantMode
+    -- Initialize network dan hook functions
+    if not AdvancedFishing.initializeNetwork() then
+        warn("[AdvancedFishing] Failed to initialize network")
+        return
+    end
     
-    print("[Fishing] Started", blatantMode and "(Blatant)" or "(Normal)")
+    AdvancedFishing.isActive = true
+    AdvancedFishing.useBlatantMode = blatantMode
     
+    -- Hook functions untuk bypass jika mode blatant
+    if blatantMode then
+        MinigameBypass.hookFishingFunctions()
+    end
+    
+    print("[AdvancedFishing] Started", blatantMode and "(Blatant with Minigame Bypass)" or "(Normal)")
+    
+    -- Start fishing loop
     task.spawn(function()
-        while Fishing.isActive do
-            if Fishing.useBlatantMode then
-                blatantLoop(config)
+        while AdvancedFishing.isActive do
+            if AdvancedFishing.useBlatantMode then
+                advancedBlatantLoop(config)
             else
-                normalLoop(config)
+                advancedNormalLoop(config)
             end
             task.wait(0.1)
         end
@@ -222,25 +376,39 @@ function Fishing.start(config, blatantMode)
 end
 
 -- Stop fishing
-function Fishing.stop()
-    Fishing.isActive = false
-    Fishing.isFishing = false
+function AdvancedFishing.stop()
+    AdvancedFishing.isActive = false
+    AdvancedFishing.isFishing = false
     
+    -- Unhook functions
+    MinigameBypass.unhookFishingFunctions()
+    
+    -- Unequip rod
     pcall(function()
-        Network.Events.unequip:FireServer()
+        if NetworkEvents.unequip then
+            NetworkEvents.unequip:FireServer()
+        end
     end)
     
-    print("[Fishing] Stopped")
+    print("[AdvancedFishing] Stopped")
 end
 
 -- Toggle blatant mode
-function Fishing.setBlatantMode(enabled)
-    Fishing.useBlatantMode = enabled
+function AdvancedFishing.setBlatantMode(enabled)
+    if AdvancedFishing.useBlatantMode == enabled then return end
+    
+    AdvancedFishing.useBlatantMode = enabled
+    
+    if enabled then
+        MinigameBypass.hookFishingFunctions()
+    else
+        MinigameBypass.unhookFishingFunctions()
+    end
 end
 
 -- Blatant Fishing Configuration
 local blatantReelDelay = 0.5  -- Default delay reel
-local blatantFishingDelay = 0.5  -- PERUBAHAN: Delay fishing di set rendah untuk SPAM CAST
+local blatantFishingDelay = 0.5  -- Delay antara fishing attempts
 
 -- UI Configuration
 local COLOR_ENABLED = Color3.fromRGB(76, 175, 80)  -- Green
@@ -259,13 +427,13 @@ task.spawn(function()
     WindUI:Popup({
         Title = "APDTE KINGGGGGGGG!",
         Icon = "fish",
-        Content = "Thank you for using Anggazyy Hub - Fish It Automation\n\nScript ini 100% Gratis dan tidak diperjualbelikan",
+        Content = "Thank you for using Anggazyy Hub - Fish It Automation\n\nDengan Advanced Minigame Bypass System",
         Buttons = {
             {
                 Title = "Get Started",
                 Icon = "check",
                 Callback = function()
-                    print("Anggazyy Hub activated!")
+                    print("Anggazyy Hub dengan Advanced Bypass activated!")
                 end
             }
         }
@@ -273,13 +441,12 @@ task.spawn(function()
 end)
 
 -- =============================================================================
--- ANTI AFK SYSTEM - Taruh di bagian Player Config
+-- ANTI AFK SYSTEM
 -- =============================================================================
 local antiAFKEnabled = false
 
 -- 🛡️ Anti Kick + Auto Reconnect Full System
 function AntiKickReconnect()
-    -- Pastikan hanya aktif sekali
     if getgenv().AntiKick_Started then return end
     getgenv().AntiKick_Started = true
 
@@ -292,7 +459,7 @@ function AntiKickReconnect()
         print("[SYSTEM] Anti-AFK aktif, mengirim aktivitas virtual ✅")
     end)
 
-    -- 🔹 Cegah manual kick dari LocalScripts
+    -- 🔹 Cegah manual kick
     local mt = getrawmetatable(game)
     local oldNamecall = mt.__namecall
     setreadonly(mt, false)
@@ -305,24 +472,6 @@ function AntiKickReconnect()
         return oldNamecall(self, ...)
     end)
     setreadonly(mt, true)
-
-    -- 🔹 Auto reconnect bawaan module game (kalau ada)
-    local success, Net = pcall(function()
-        return require(ReplicatedStorage.Packages.Net)
-    end)
-    if success and Net then
-        local reconnectEvent = Net:RemoteEvent("ReconnectPlayer")
-        task.spawn(function()
-            while task.wait(10) do
-                if not LocalPlayer:IsDescendantOf(Players) then
-                    warn("[SYSTEM] Pemain terputus, mencoba reconnect 🔄")
-                    reconnectEvent:FireServer()
-                end
-            end
-        end)
-    else
-        warn("[SYSTEM] Module Net tidak ditemukan, auto reconnect dinonaktifkan ⚠️")
-    end
 
     print("[SYSTEM] Anti Kick + Auto Reconnect aktif sepenuhnya 🚀")
 end
@@ -338,7 +487,6 @@ local function ToggleAntiAFK(state)
         })
     else
         antiAFKEnabled = false
-        -- Note: Beberapa hook tidak bisa di-disable sepenuhnya untuk keamanan
         Notify({
             Title = "Anti AFK System", 
             Content = "Basic protection remains active for safety",
@@ -381,11 +529,11 @@ local function Notify(opts)
 end
 
 -- =============================================================================
--- BLATANT FISHING SYSTEM - USING UPDATED MODULE
+-- BLATANT FISHING SYSTEM - USING ADVANCED MODULE
 -- =============================================================================
 
 local function InitializeBlatantFishing()
-    local success = Network.initialize()
+    local success = AdvancedFishing.initializeNetwork()
     if success then
         Notify({Title = "Blatant Fishing", Content = "System initialized successfully", Duration = 3})
         return true
@@ -425,11 +573,11 @@ end
 
 -- Fungsi publik untuk mengaktifkan/menonaktifkan Blatant Mode
 local function ToggleBlatantMode(enable)
-    if enable == Fishing.useBlatantMode then return end
+    if enable == AdvancedFishing.useBlatantMode then return end
     
     if enable then
         -- Initialize system if not already initialized
-        if not Network.Events.fishing then
+        if not AdvancedFishing.networkInitialized then
             if not InitializeBlatantFishing() then
                 return false
             end
@@ -441,13 +589,13 @@ local function ToggleBlatantMode(enable)
             CatchDelay = blatantReelDelay
         }
         
-        Fishing.start(config, true)
-        Notify({Title = "⚡ Blatant Fishing", Content = "Fast fishing mode activated - Instant spam casting.", Duration = 3})
+        AdvancedFishing.start(config, true)
+        Notify({Title = "⚡ Blatant Fishing", Content = "Fast fishing mode activated - Minigame Bypass Active", Duration = 3})
         
     else
         -- Stop fishing
-        Fishing.stop()
-        Fishing.setBlatantMode(false)
+        AdvancedFishing.stop()
+        AdvancedFishing.setBlatantMode(false)
         Notify({Title = "Blatant Fishing", Content = "Fast fishing mode deactivated", Duration = 3})
     end
     
@@ -456,14 +604,14 @@ end
 
 -- Manual fishing function untuk testing
 local function ManualBlatantFish()
-    if not Fishing.useBlatantMode then
+    if not AdvancedFishing.useBlatantMode then
         Notify({Title = "Blatant Fishing", Content = "Please enable Blatant Mode first", Duration = 3})
         return
     end
     
     pcall(function()
-        castRod()
-        Notify({Title = "⚡ Manual Cast", Content = "Casting fishing rod instantly...", Duration = 2})
+        advancedCastRod()
+        Notify({Title = "⚡ Manual Cast", Content = "Casting fishing rod with bypass...", Duration = 2})
     end)
 end
 
@@ -817,7 +965,7 @@ local function StartAutoFish()
         CatchDelay = 2
     }
     
-    Fishing.start(config, false)
+    AdvancedFishing.start(config, false)
 end
 
 local function StopAutoFish()
@@ -825,7 +973,7 @@ local function StopAutoFish()
     autoFishEnabled = false
     Notify({Title = "Auto Fishing", Content = "System deactivated", Duration = 2})
     
-    Fishing.stop()
+    AdvancedFishing.stop()
 end
 
 -- =============================================================================
@@ -2049,7 +2197,7 @@ SettingsTab:Button({
 -- Initial Notification
 Notify({
     Title = "Anggazyy Hub Ready", 
-    Content = "WindUI System initialized successfully with UPDATED Fishing Module",
+    Content = "WindUI System initialized successfully with Advanced Minigame Bypass",
     Duration = 4
 })
 
